@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
-from backend.routers import document_router
+from backend.routers import document_router, chat_router
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,6 +26,7 @@ app.add_middleware(
 
 # Include routers
 app.include_router(document_router.router)
+app.include_router(chat_router.router)
 
 @app.get("/")
 async def root():

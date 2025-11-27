@@ -61,7 +61,8 @@ class AdaptiveChunker(BaseChunker):
             chunk_metadata.update({
                 "chunk_index": chunk_index,
                 "chunk_size": len(chunk_text),
-                "total_doc_size": text_length
+                "total_doc_size": text_length,
+                "chunk_text": chunk_text.strip()  # Store text for BM25 search
             })
             
             chunks.append({

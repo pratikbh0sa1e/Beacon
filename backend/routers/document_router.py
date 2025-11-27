@@ -4,6 +4,7 @@ from typing import List
 import os
 import shutil
 import re
+import glob
 from datetime import datetime
 
 from backend.database import get_db, Document
@@ -149,23 +150,51 @@ async def list_documents(db: Session = Depends(get_db)):
 
 @router.get("/vector-stats")
 async def get_vector_stats():
-    """Get vector store statistics"""
+    """Get overall vector store statistics"""
     try:
-        stats = embedding_pipeline.vector_store.get_stats()
+        # Count all document folders
+        import glob
+        doc_folders = glob.glob("Agent/vector_store/documents/*/")
+        total_docs = len(doc_folders)
+        
         return {
             "status": "success",
-            "stats": stats,
-            "storage_location": "Agent/vector_store/faiss_index.*"
+            "total_documents": total_docs,
+            "storage_mode": "separate_indexes",
+            "storage_location": "Agent/vector_store/documents/{doc_id}/",
+            "document_folders": [os.path.basename(os.path.dirname(f)) for f in doc_folders]
         }
     except Exception as e:
         return {
             "status": "error",
-            "message": str(e),
-            "stats": {
-                "total_vectors": 0,
-                "total_documents": 0,
-                "dimension": 384
-            }
+            "message": str(e)
+        }
+
+@router.get("/vector-stats/{document_id}")
+async def get_document_vector_stats(document_id: int):
+    """Get vector store statistics for a specific document"""
+    try:
+        from Agent.vector_store.faiss_store import FAISSVectorStore
+        index_path = f"Agent/vector_store/documents/{document_id}/faiss_index"
+        
+        if not os.path.exists(f"{index_path}.index"):
+            raise HTTPException(status_code=404, detail="Vector index not found for this document")
+        
+        vector_store = FAISSVectorStore(index_path=index_path)
+        stats = vector_store.get_stats()
+        
+        return {
+            "status": "success",
+            "document_id": document_id,
+            "stats": stats,
+            "index_path": index_path
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        return {
+            "status": "error",
+            "message": str(e)
         }
 
 @router.get("/{document_id}")

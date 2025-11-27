@@ -22,10 +22,11 @@ logger = logging.getLogger(__name__)
 class EmbeddingPipeline:
     """Complete pipeline for document embedding"""
     
-    def __init__(self, chunker=None, embedder=None, vector_store=None):
+    def __init__(self, chunker=None, embedder=None, vector_store=None, use_separate_indexes=True):
         self.chunker = chunker or AdaptiveChunker()
         self.embedder = embedder or BGEEmbedder()
-        self.vector_store = vector_store or FAISSVectorStore()
+        self.vector_store = vector_store  # Will be created per document if use_separate_indexes
+        self.use_separate_indexes = use_separate_indexes
     
     def _generate_doc_hash(self, text: str, filename: str) -> str:
         """Generate unique hash for document"""
@@ -44,19 +45,30 @@ class EmbeddingPipeline:
             Dict with processing results
         """
         filename = metadata.get("filename", "unknown")
+        document_id = metadata.get("document_id", "unknown")
         logger.info(f"Processing document: {filename}")
         
         # Generate document hash
         doc_hash = self._generate_doc_hash(text, filename)
         logger.debug(f"Document hash: {doc_hash}")
         
+        # Create separate vector store for this document if enabled
+        if self.use_separate_indexes:
+            # Create folder structure: Agent/vector_store/documents/{doc_id}/
+            index_path = f"Agent/vector_store/documents/{document_id}/faiss_index"
+            vector_store = FAISSVectorStore(index_path=index_path)
+            logger.info(f"Using separate index at: {index_path}")
+        else:
+            vector_store = self.vector_store or FAISSVectorStore()
+        
         # Check if document already exists
-        if self.vector_store.document_exists(doc_hash):
+        if vector_store.document_exists(doc_hash):
             logger.info(f"Document {filename} already exists, skipping")
             return {
                 "status": "skipped",
                 "message": "Document already exists in vector store",
-                "doc_hash": doc_hash
+                "doc_hash": doc_hash,
+                "index_path": index_path if self.use_separate_indexes else "shared"
             }
         
         # Chunk the text
@@ -82,7 +94,7 @@ class EmbeddingPipeline:
         
         # Store in vector database
         logger.info("Storing embeddings in FAISS...")
-        success = self.vector_store.add_embeddings(embeddings, chunk_metadata, doc_hash)
+        success = vector_store.add_embeddings(embeddings, chunk_metadata, doc_hash)
         
         if success:
             logger.info(f"Successfully processed {filename}: {len(chunks)} chunks, {len(embeddings)} embeddings")
@@ -93,5 +105,6 @@ class EmbeddingPipeline:
             "status": "success" if success else "error",
             "doc_hash": doc_hash,
             "num_chunks": len(chunks),
-            "num_embeddings": len(embeddings)
+            "num_embeddings": len(embeddings),
+            "index_path": index_path if self.use_separate_indexes else "shared"
         }
