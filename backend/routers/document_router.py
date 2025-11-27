@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List
 import os
 import shutil
+import re
 from datetime import datetime
 
 from backend.database import get_db, Document
@@ -17,6 +18,17 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Initialize embedding pipeline
 embedding_pipeline = EmbeddingPipeline()
+
+def sanitize_filename(filename: str) -> str:
+    """Sanitize filename for Supabase storage"""
+    # Remove or replace characters that Supabase doesn't allow
+    # Keep only alphanumeric, dots, hyphens, and underscores
+    name, ext = os.path.splitext(filename)
+    # Replace spaces and special chars with underscores
+    safe_name = re.sub(r'[^\w\-.]', '_', name)
+    # Remove consecutive underscores
+    safe_name = re.sub(r'_+', '_', safe_name)
+    return f"{safe_name}{ext}"
 
 def process_embeddings_background(document_id: int, text: str, metadata: dict):
     """Background task to process embeddings"""
@@ -52,9 +64,10 @@ async def upload_documents(
                 })
                 continue
             
-            # Save file locally
+            # Save file locally with sanitized filename
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            unique_filename = f"{timestamp}_{file.filename}"
+            safe_filename = sanitize_filename(file.filename)
+            unique_filename = f"{timestamp}_{safe_filename}"
             file_path = os.path.join(UPLOAD_DIR, unique_filename)
             
             with open(file_path, "wb") as buffer:
@@ -63,20 +76,36 @@ async def upload_documents(
             # Extract text
             extracted_text = extract_text(file_path, file_ext)
             
+            # Check text size (PostgreSQL text field limit is ~1GB, but let's be safe)
+            # If text is too large, we'll still store it but log a warning
+            text_size_mb = len(extracted_text.encode('utf-8')) / (1024 * 1024)
+            if text_size_mb > 10:  # Warn if over 10MB
+                print(f"Warning: Large text extracted ({text_size_mb:.2f}MB) from {file.filename}")
+            
             # Upload to Supabase S3
             s3_url = upload_to_supabase(file_path, unique_filename)
             
-            # Save to database
-            doc = Document(
-                filename=file.filename,
-                file_type=file_ext,
-                file_path=file_path,
-                s3_url=s3_url,
-                extracted_text=extracted_text
-            )
-            db.add(doc)
-            db.commit()
-            db.refresh(doc)
+            # Save to database with retry logic
+            try:
+                doc = Document(
+                    filename=file.filename,
+                    file_type=file_ext,
+                    file_path=file_path,
+                    s3_url=s3_url,
+                    extracted_text=extracted_text
+                )
+                db.add(doc)
+                db.commit()
+                db.refresh(doc)
+            except Exception as db_error:
+                db.rollback()
+                # Retry once
+                try:
+                    db.add(doc)
+                    db.commit()
+                    db.refresh(doc)
+                except Exception as retry_error:
+                    raise Exception(f"Database error after retry: {str(retry_error)}")
             
             # Trigger background embedding task
             embedding_metadata = {

@@ -16,7 +16,21 @@ DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
 
 DATABASE_URL = f"postgresql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_HOSTNAME}:{DATABASE_PORT}/{DATABASE_NAME}"
 
-engine = create_engine(DATABASE_URL)
+# Create engine with connection pooling and timeout settings
+engine = create_engine(
+    DATABASE_URL,
+    pool_size=10,
+    max_overflow=20,
+    pool_pre_ping=True,  # Verify connections before using
+    pool_recycle=3600,   # Recycle connections after 1 hour
+    connect_args={
+        "connect_timeout": 10,
+        "keepalives": 1,
+        "keepalives_idle": 30,
+        "keepalives_interval": 10,
+        "keepalives_count": 5,
+    }
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 
