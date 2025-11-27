@@ -20,7 +20,8 @@ if __name__ == "__main__":
         "tests/test_embeddings.py",
         "tests/test_retrieval.py",
         "tests/test_document_upload.py",
-        "tests/test_agent.py"
+        "tests/test_agent.py",
+        "tests/test_citations.py"
     ]
     
     results = {}
