@@ -1,0 +1,102 @@
+import React from 'react';
+import { Link, useLocation } from 'react-router-dom';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Home, FileText, Upload, MessageSquare, Users, Building2, BarChart3, Shield, Settings, X } from 'lucide-react';
+import { useAuthStore } from '../../stores/authStore';
+import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from '../../constants/roles';
+import { Button } from '../ui/button';
+import { cn } from '../../lib/utils';
+
+const menuItems = [
+  { icon: Home, label: 'Dashboard', path: '/', roles: [] },
+  { icon: FileText, label: 'Documents', path: '/documents', roles: [] },
+  { icon: Upload, label: 'Upload', path: '/upload', roles: DOCUMENT_MANAGER_ROLES },
+  { icon: MessageSquare, label: 'AI Assistant', path: '/ai-chat', roles: [] },
+  { icon: Users, label: 'User Management', path: '/admin/users', roles: ADMIN_ROLES },
+  { icon: Shield, label: 'Approvals', path: '/admin/approvals', roles: ADMIN_ROLES },
+  { icon: Building2, label: 'Institutions', path: '/admin/institutions', roles: ADMIN_ROLES },
+  { icon: BarChart3, label: 'Analytics', path: '/admin/analytics', roles: ADMIN_ROLES },
+  { icon: Settings, label: 'System Health', path: '/admin/system', roles: ADMIN_ROLES },
+];
+
+export const Sidebar = ({ isOpen, onClose }) => {
+  const location = useLocation();
+  const { user } = useAuthStore();
+
+  const filteredMenuItems = menuItems.filter(
+    (item) => item.roles.length === 0 || item.roles.includes(user?.role)
+  );
+
+  return (
+    <>
+      <AnimatePresence>
+        {isOpen && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-40 bg-background/80 backdrop-blur-sm lg:hidden"
+            onClick={onClose}
+          />
+        )}
+      </AnimatePresence>
+
+      <motion.aside
+        initial={false}
+        animate={{
+          x: isOpen ? 0 : -280,
+        }}
+        className={cn(
+          'fixed top-16 left-0 z-40 h-[calc(100vh-4rem)] w-64 border-r border-border/40 glass-card',
+          'lg:translate-x-0 lg:static lg:h-auto'
+        )}
+      >
+        <div className="flex h-full flex-col">
+          <div className="flex items-center justify-between p-4 lg:hidden">
+            <span className="text-lg font-semibold">Menu</span>
+            <Button variant="ghost" size="icon" onClick={onClose}>
+              <X className="h-5 w-5" />
+            </Button>
+          </div>
+
+          <nav className="flex-1 space-y-1 p-4 overflow-y-auto scrollbar-hide">
+            {filteredMenuItems.map((item) => {
+              const Icon = item.icon;
+              const isActive = location.pathname === item.path;
+
+              return (
+                <Link key={item.path} to={item.path} onClick={() => onClose()}>
+                  <motion.div
+                    whileHover={{ x: 4 }}
+                    whileTap={{ scale: 0.98 }}
+                    className={cn(
+                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                      isActive
+                        ? 'bg-primary/10 text-primary border border-primary/20 neon-glow'
+                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                    )}
+                  >
+                    <Icon className="h-5 w-5" />
+                    <span>{item.label}</span>
+                  </motion.div>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="border-t border-border/40 p-4">
+            <div className="rounded-lg bg-gradient-to-br from-primary/10 to-accent/10 p-4 border border-primary/20">
+              <h4 className="text-sm font-semibold mb-1">Need Help?</h4>
+              <p className="text-xs text-muted-foreground mb-3">
+                Contact support or check documentation
+              </p>
+              <Button size="sm" variant="outline" className="w-full">
+                Get Support
+              </Button>
+            </div>
+          </div>
+        </div>
+      </motion.aside>
+    </>
+  );
+};
