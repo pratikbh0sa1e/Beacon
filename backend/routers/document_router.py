@@ -1,18 +1,18 @@
 from fastapi import APIRouter, UploadFile, File, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
-from typing import List
+from typing import List,Optional
 import os
 import shutil
 import re
 import glob
 from datetime import datetime
-
-from backend.database import get_db, Document, DocumentMetadata
+from backend.routers.auth_router import get_current_user
+from backend.database import get_db, Document, DocumentMetadata, User
 from backend.utils.text_extractor import extract_text
 from backend.utils.supabase_storage import upload_to_supabase
 from Agent.metadata.extractor import MetadataExtractor
 
-router = APIRouter(prefix="/documents", tags=["documents"])
+router = APIRouter(tags=["documents"])
 
 UPLOAD_DIR = "backend/files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
@@ -68,6 +68,7 @@ async def upload_documents(
     files: List[UploadFile] = File(...),
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
     source_department: str = "Unknown"
 ):
     """
@@ -116,7 +117,10 @@ async def upload_documents(
                     file_type=file_ext,
                     file_path=file_path,
                     s3_url=s3_url,
-                    extracted_text=extracted_text
+                    extracted_text=extracted_text,
+                    uploader_id=current_user.id, # <--- SAVE USER ID
+                    institution_id=current_user.institution_id, # <--- SAVE INSTITUTION
+                    visibility_level="public" # Default visibility
                 )
                 db.add(doc)
                 db.commit()
@@ -164,9 +168,35 @@ async def upload_documents(
     return {"results": results}
 
 @router.get("/list")
-async def list_documents(db: Session = Depends(get_db)):
-    """List all uploaded documents"""
-    documents = db.query(Document).all()
+async def list_documents(category: Optional[str] = None, db: Session = Depends(get_db)):
+    # """List all uploaded documents"""
+    # documents = db.query(Document).all()
+    # return {"documents": documents}
+    """List documents with their metadata"""
+    # Join Document with Metadata so we get title, description, category
+    query = db.query(Document, DocumentMetadata).\
+        outerjoin(DocumentMetadata, Document.id == DocumentMetadata.document_id)
+    
+    if category and category != "all":
+        query = query.filter(DocumentMetadata.document_type == category)
+
+    results = query.all()
+    
+    # Format for Frontend
+    documents = []
+    for doc, meta in results:
+        documents.append({
+            "id": doc.id,
+            "title": meta.title if meta else doc.filename, # Fallback title
+            "description": meta.summary if meta else "",
+            "category": meta.document_type if meta else "Uncategorized",
+            "created_at": doc.uploaded_at, # Assuming field exists
+            "visibility": doc.visibility_level,
+            "department": meta.department if meta else "Unknown",
+            "year": meta.date_published.year if meta and meta.date_published else datetime.now().year,
+            "updated_at": doc.uploaded_at
+        })
+    
     return {"documents": documents}
 
 @router.get("/vector-stats")

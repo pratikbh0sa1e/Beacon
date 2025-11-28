@@ -1,34 +1,36 @@
-import React, { useState, useRef, useEffect } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Send, Bot, User, Loader2, FileText, AlertCircle } from 'lucide-react';
-import { chatAPI } from '../services/api';
-import { PageHeader } from '../components/common/PageHeader';
-import { Button } from '../components/ui/button';
-import { Input } from '../components/ui/input';
-import { Card, CardContent } from '../components/ui/card';
-import { Badge } from '../components/ui/badge';
-import { toast } from 'sonner';
+import React, { useState, useRef, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Send, Bot, User, Loader2, FileText, AlertCircle } from "lucide-react";
+import { chatAPI } from "../services/api";
+import { PageHeader } from "../components/common/PageHeader";
+import { Button } from "../components/ui/button";
+import { Input } from "../components/ui/input";
+import { Card, CardContent } from "../components/ui/card";
+import { Badge } from "../components/ui/badge";
+import { toast } from "sonner";
 
 const Message = ({ message, isUser }) => (
   <motion.div
     initial={{ opacity: 0, y: 20 }}
     animate={{ opacity: 1, y: 0 }}
-    className={`flex gap-3 ${isUser ? 'justify-end' : 'justify-start'}`}
+    className={`flex gap-3 ${isUser ? "justify-end" : "justify-start"}`}
   >
     {!isUser && (
       <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
         <Bot className="h-5 w-5 text-primary" />
       </div>
     )}
-    <div className={`max-w-[80%] ${isUser ? 'order-first' : ''}`}>
+    <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
       <div
         className={`rounded-2xl px-4 py-3 ${
           isUser
-            ? 'bg-primary text-primary-foreground'
-            : 'glass-card border-border/50'
+            ? "bg-primary text-primary-foreground"
+            : "glass-card border-border/50"
         }`}
       >
-        <p className="text-sm leading-relaxed whitespace-pre-wrap">{message.text}</p>
+        <p className="text-sm leading-relaxed whitespace-pre-wrap">
+          {message.text}
+        </p>
       </div>
       {message.confidence && (
         <div className="flex items-center gap-2 mt-2 px-2">
@@ -51,8 +53,12 @@ const Message = ({ message, isUser }) => (
               <div className="flex items-start gap-2">
                 <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">{citation.document_title}</p>
-                  <p className="text-xs text-muted-foreground">Page {citation.page_number}</p>
+                  <p className="text-sm font-medium truncate">
+                    {citation.document_title}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Page {citation.page_number}
+                  </p>
                 </div>
               </div>
             </motion.div>
@@ -72,16 +78,16 @@ export const AIChatPage = () => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: 'Hello! I\'m the BEACON AI Assistant. Ask me anything about your documents, and I\'ll help you find the information you need.',
+      text: "Hello! I'm the BEACON AI Assistant. Ask me anything about your documents, and I'll help you find the information you need.",
       isUser: false,
     },
   ]);
-  const [input, setInput] = useState('');
+  const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
   useEffect(() => {
@@ -98,7 +104,7 @@ export const AIChatPage = () => {
     };
 
     setMessages((prev) => [...prev, userMessage]);
-    setInput('');
+    setInput("");
     setLoading(true);
 
     try {
@@ -115,22 +121,22 @@ export const AIChatPage = () => {
 
       setMessages((prev) => [...prev, aiMessage]);
     } catch (error) {
-      console.error('Chat error:', error);
+      console.error("Chat error:", error);
       const errorMessage = {
         id: Date.now() + 1,
-        text: 'I apologize, but I encountered an error processing your request. Please try again.',
+        text: "I apologize, but I encountered an error processing your request. Please try again.",
         isUser: false,
         isError: true,
       };
       setMessages((prev) => [...prev, errorMessage]);
-      toast.error('Failed to get AI response');
+      toast.error("Failed to get AI response");
     } finally {
       setLoading(false);
     }
   };
 
   const handleKeyPress = (e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === "Enter" && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
@@ -145,11 +151,15 @@ export const AIChatPage = () => {
       />
 
       <Card className="glass-card border-border/50 flex-1 flex flex-col overflow-hidden">
-        <CardContent className="p-6 flex-1 flex flex-col">
-          <div className="flex-1 overflow-y-auto space-y-6 mb-4 scrollbar-hide">
+        <CardContent className="p-6 flex-1 flex flex-col min-h-0">
+          <div className="flex-1 overflow-y-auto min-h-0 space-y-6 mb-4 scrollbar-hide">
             <AnimatePresence>
               {messages.map((message) => (
-                <Message key={message.id} message={message} isUser={message.isUser} />
+                <Message
+                  key={message.id}
+                  message={message}
+                  isUser={message.isUser}
+                />
               ))}
             </AnimatePresence>
             {loading && (
@@ -165,11 +175,17 @@ export const AIChatPage = () => {
                   <div className="flex items-center gap-2">
                     <motion.div
                       animate={{ rotate: 360 }}
-                      transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+                      transition={{
+                        duration: 1,
+                        repeat: Infinity,
+                        ease: "linear",
+                      }}
                     >
                       <Loader2 className="h-4 w-4 text-primary" />
                     </motion.div>
-                    <span className="text-sm text-muted-foreground">Thinking...</span>
+                    <span className="text-sm text-muted-foreground">
+                      Thinking...
+                    </span>
                   </div>
                 </div>
               </motion.div>
@@ -197,7 +213,8 @@ export const AIChatPage = () => {
             </div>
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
-              AI responses may not always be accurate. Verify important information.
+              AI responses may not always be accurate. Verify important
+              information.
             </p>
           </div>
         </CardContent>

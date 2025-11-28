@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean, JSON, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean, JSON
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -71,7 +71,18 @@ class User(Base):
     # Relationships
     institution = relationship("Institution", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")
-    uploaded_documents = relationship("Document", back_populates="uploader")
+    
+    # ✅ FIXED: Specify foreign_keys to resolve ambiguity
+    uploaded_documents = relationship(
+        "Document",
+        foreign_keys="Document.uploader_id",
+        back_populates="uploader"
+    )
+    approved_documents = relationship(
+        "Document",
+        foreign_keys="Document.approved_by",
+        back_populates="approver"
+    )
 
 
 class Document(Base):
@@ -103,8 +114,25 @@ class Document(Base):
     additional_metadata = Column(Text, nullable=True)
     
     # Relationships
-    doc_metadata_rel = relationship("DocumentMetadata", back_populates="document", uselist=False, cascade="all, delete-orphan")
-    uploader = relationship("User", foreign_keys=[uploader_id], back_populates="uploaded_documents")
+    doc_metadata_rel = relationship(
+        "DocumentMetadata",
+        back_populates="document",
+        uselist=False,
+        cascade="all, delete-orphan"
+    )
+    
+    # ✅ FIXED: Specify foreign_keys in both relationships
+    uploader = relationship(
+        "User",
+        foreign_keys=[uploader_id],
+        back_populates="uploaded_documents"
+    )
+    approver = relationship(
+        "User",
+        foreign_keys=[approved_by],
+        back_populates="approved_documents"
+    )
+    
     institution = relationship("Institution")
 
 
@@ -143,6 +171,7 @@ class DocumentMetadata(Base):
     
     # Relationship
     document = relationship("Document", back_populates="doc_metadata_rel")
+
 
 class ExternalDataSource(Base):
     """Registry of external data sources (ministry databases)"""
@@ -207,7 +236,6 @@ class SyncLog(Base):
     
     started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
-
 
 
 class AuditLog(Base):

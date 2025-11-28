@@ -8,7 +8,7 @@ from datetime import datetime
 from backend.database import get_db, Document, User, AuditLog
 from backend.routers.auth_router import get_current_user
 
-router = APIRouter(prefix="/approvals", tags=["document-approval"])
+router = APIRouter()
 
 
 class ApprovalRequest(BaseModel):

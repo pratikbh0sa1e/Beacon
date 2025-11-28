@@ -7,7 +7,7 @@ from typing import List, Optional
 from backend.database import get_db, Institution, User
 from backend.routers.auth_router import get_current_user
 
-router = APIRouter(prefix="/institutions", tags=["institutions"])
+router = APIRouter(tags=["institutions"])
 
 
 class InstitutionCreate(BaseModel):

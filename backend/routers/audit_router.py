@@ -7,7 +7,7 @@ from datetime import datetime, timedelta
 from backend.database import get_db, AuditLog, User
 from backend.routers.auth_router import get_current_user
 
-router = APIRouter(prefix="/audit", tags=["audit-logs"])
+router = APIRouter()
 
 
 @router.get("/logs")

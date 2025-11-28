@@ -1,8 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
-from backend.routers import document_router, chat_router, data_source_router
-from Agent.data_ingestion.scheduler import start_scheduler
 from backend.routers import (
     auth_router,
     user_router,
@@ -10,9 +8,11 @@ from backend.routers import (
     document_router,
     approval_router,
     chat_router,
-    audit_router
+    audit_router,
+    data_source_router
 )
 from backend.init_developer import initialize_developer_account
+from Agent.data_ingestion.scheduler import start_scheduler
 from dotenv import load_dotenv
 import logging
 
@@ -37,14 +37,17 @@ app = FastAPI(
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://localhost:3000",
-        "http://127.0.0.1:3000",],  # Add your frontend URLs
+    allow_origins=[
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Include routers with consistent /api prefix removed (handled by frontend)
+# Include routers
 app.include_router(auth_router.router, prefix="/auth", tags=["authentication"])
 app.include_router(user_router.router, prefix="/users", tags=["user-management"])
 app.include_router(institution_router.router, prefix="/institutions", tags=["institutions"])
@@ -52,7 +55,7 @@ app.include_router(document_router.router, prefix="/documents", tags=["documents
 app.include_router(approval_router.router, prefix="/approvals", tags=["approvals"])
 app.include_router(chat_router.router, prefix="/chat", tags=["chat"])
 app.include_router(audit_router.router, prefix="/audit", tags=["audit"])
-app.include_router(data_source_router.router)
+app.include_router(data_source_router.router, prefix="/data-sources", tags=["data-sources"])
 
 @app.get("/")
 async def root():
@@ -67,7 +70,8 @@ async def root():
             "documents": "/documents",
             "approvals": "/approvals",
             "chat": "/chat",
-            "audit": "/audit"
+            "audit": "/audit",
+            "data_sources": "/data-sources"
         },
         "documentation": "/docs"
     }
@@ -77,8 +81,9 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected",
-        "services": ["auth", "documents", "chat", "approvals"]
+        "services": ["auth", "documents", "chat", "approvals", "data-sources"]
     }
+
 @app.on_event("startup")
 async def startup_event():
     """Start background scheduler on app startup"""

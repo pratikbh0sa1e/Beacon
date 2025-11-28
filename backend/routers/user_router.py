@@ -8,7 +8,7 @@ from datetime import datetime
 from backend.database import get_db, User, AuditLog
 from backend.routers.auth_router import get_current_user
 
-router = APIRouter(prefix="/users", tags=["user-management"])
+router = APIRouter( tags=["user-management"])
 
 
 class UserListResponse(BaseModel):

@@ -24,7 +24,7 @@ ROLE_DISPLAY_NAMES = {
     PUBLIC_VIEWER: "Public Viewer"
 }
 
-ROLES = list(ROLE_DISPLAY_NAMES.keys())
+# ROLES = list(ROLE_DISPLAY_NAMES.keys())
 
 
 # Visibility levels for documents

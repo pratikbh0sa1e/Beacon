@@ -175,7 +175,8 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
             "sub": user.id,
             "email": user.email,
             "role": user.role,
-            "institution_id": user.institution_id
+            "institution_id": user.institution_id,
+            "approved": user.approved
         }
     )
     

@@ -9,7 +9,7 @@ from Agent.rag_agent.react_agent import PolicyRAGAgent
 
 load_dotenv()
 
-router = APIRouter(prefix="/chat", tags=["chat"])
+router = APIRouter(tags=["chat"])
 
 # Initialize agent (lazy loading)
 agent = None
