@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -143,25 +143,6 @@ class DocumentMetadata(Base):
     
     # Relationship
     document = relationship("Document", back_populates="doc_metadata_rel")
-
-
-class AuditLog(Base):
-    """Audit trail for all system actions"""
-    __tablename__ = "audit_logs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
-    action = Column(String(100), nullable=False, index=True)
-    # Actions: login, logout, upload_document, approve_user, reject_user, 
-    #          approve_document, reject_document, role_changed, search_query
-    
-    # ✅ FIXED: Renamed from 'metadata' to 'action_metadata' to avoid SQLAlchemy conflict
-    action_metadata = Column(JSONB, nullable=True)  # Additional context
-    timestamp = Column(DateTime, default=datetime.utcnow, index=True)
-    
-    # Relationship
-    user = relationship("User", back_populates="audit_logs")
-
 
 def get_db():
     """Database session dependency"""
