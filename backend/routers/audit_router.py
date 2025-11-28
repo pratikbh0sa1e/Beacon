@@ -64,6 +64,18 @@ async def get_audit_logs(
     result = []
     for log in logs:
         user = db.query(User).filter(User.id == log.user_id).first()
+        # result.append({
+        #     "id": log.id,
+        #     "action": log.action,
+        #     "timestamp": log.timestamp,
+        #     "user": {
+        #         "id": user.id if user else None,
+        #         "name": user.name if user else "Unknown",
+        #         "email": user.email if user else "Unknown",
+        #         "role": user.role if user else "Unknown"
+        #     },
+        #     "metadata": log.metadata
+        # })
         result.append({
             "id": log.id,
             "action": log.action,
@@ -74,7 +86,7 @@ async def get_audit_logs(
                 "email": user.email if user else "Unknown",
                 "role": user.role if user else "Unknown"
             },
-            "metadata": log.metadata
+            "metadata": log.action_metadata  # ✅ Changed from log.metadata
         })
     
     return {

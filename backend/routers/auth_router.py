@@ -1,5 +1,5 @@
 """Authentication router - handles user registration, login, and JWT tokens"""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
@@ -9,9 +9,10 @@ import bcrypt
 import jwt
 import os
 
-from backend.database import get_db, User
+from backend.database import get_db, User, AuditLog
+from backend.constants.roles import ALL_ROLES, DEVELOPER, PUBLIC_VIEWER
 
-router = APIRouter(prefix="/auth", tags=["authentication"])
+router = APIRouter()
 security = HTTPBearer()
 
 # JWT Configuration
@@ -24,7 +25,7 @@ class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
     password: str
-    role: str  # student, document_officer, university_admin, moe_admin
+    role: str
     institution_id: Optional[int] = None
 
 
@@ -106,17 +107,12 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     Register a new user
     
-    - Students and Document Officers need institution_id
-    - University Admin and MoE Admin need institution_id
-    - Public Viewer and Developer don't need institution
-    - Developer role is auto-approved
-    - Public Viewer is auto-approved
+    - Developer and Public Viewer are auto-approved
     - Others need approval from their admin
     """
     # Validate role
-    valid_roles = ["student", "document_officer", "university_admin", "moe_admin", "public_viewer", "developer"]
-    if request.role not in valid_roles:
-        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {valid_roles}")
+    if request.role not in ALL_ROLES:
+        raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {ALL_ROLES}")
     
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == request.email).first()
@@ -132,7 +128,7 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     hashed_password = hash_password(request.password)
     
     # Auto-approve for developer and public_viewer
-    auto_approved_roles = ["developer", "public_viewer"]
+    auto_approved_roles = [DEVELOPER, PUBLIC_VIEWER]
     approved = request.role in auto_approved_roles
     
     # Create user
@@ -156,10 +152,6 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
 async def login(request: LoginRequest, db: Session = Depends(get_db)):
     """
     Login user and return JWT token
-    
-    - Verifies email and password
-    - Checks if user is approved
-    - Returns JWT token with user info
     """
     # Find user
     user = db.query(User).filter(User.email == request.email).first()
@@ -187,6 +179,15 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         }
     )
     
+    # Log login
+    audit = AuditLog(
+        user_id=user.id,
+        action="login",
+        action_metadata={"email": user.email}  # ✅ Changed from 'metadata'
+    )
+    db.add(audit)
+    db.commit()
+    
     return {
         "access_token": access_token,
         "token_type": "bearer",
@@ -208,9 +209,15 @@ async def get_me(current_user: User = Depends(get_current_user)):
 
 
 @router.post("/logout")
-async def logout(current_user: User = Depends(get_current_user)):
-    """
-    Logout user (client should delete token)
-    This is mainly for audit logging purposes
-    """
+async def logout(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    """Logout user (client should delete token)"""
+    # Log logout
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="logout",
+        action_metadata={"email": current_user.email}  # ✅ Changed from 'metadata'
+    )
+    db.add(audit)
+    db.commit()
+    
     return {"message": "Successfully logged out"}

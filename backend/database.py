@@ -98,7 +98,9 @@ class Document(Base):
     approved_at = Column(DateTime, nullable=True)
     
     uploaded_at = Column(DateTime, default=datetime.utcnow)
-    doc_metadata = Column(Text, nullable=True)
+    
+    # ✅ FIXED: Renamed from 'metadata' to 'additional_metadata' to avoid SQLAlchemy conflict
+    additional_metadata = Column(Text, nullable=True)
     
     # Relationships
     doc_metadata_rel = relationship("DocumentMetadata", back_populates="document", uselist=False, cascade="all, delete-orphan")
@@ -153,7 +155,8 @@ class AuditLog(Base):
     # Actions: login, logout, upload_document, approve_user, reject_user, 
     #          approve_document, reject_document, role_changed, search_query
     
-    metadata = Column(JSONB, nullable=True)  # Additional context
+    # ✅ FIXED: Renamed from 'metadata' to 'action_metadata' to avoid SQLAlchemy conflict
+    action_metadata = Column(JSONB, nullable=True)  # Additional context
     timestamp = Column(DateTime, default=datetime.utcnow, index=True)
     
     # Relationship

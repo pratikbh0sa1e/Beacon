@@ -60,7 +60,9 @@ def log_audit(db: Session, user_id: int, action: str, metadata: dict):
     audit = AuditLog(
         user_id=user_id,
         action=action,
-        metadata=metadata
+        # metadata=metadata
+        action_metadata=metadata  # ✅ Changed from 'metadata=metadata'
+
     )
     db.add(audit)
     db.commit()

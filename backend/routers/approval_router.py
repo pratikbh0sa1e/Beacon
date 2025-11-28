@@ -139,10 +139,20 @@ async def approve_document(
     db.commit()
     
     # Log audit
+    # audit = AuditLog(
+    #     user_id=current_user.id,
+    #     action="document_approved",
+    #     metadata={
+    #         "document_id": document_id,
+    #         "filename": document.filename,
+    #         "visibility_level": document.visibility_level,
+    #         "notes": request.notes
+    #     }
+    # )
     audit = AuditLog(
         user_id=current_user.id,
         action="document_approved",
-        metadata={
+        action_metadata={  # ✅ Changed from 'metadata'
             "document_id": document_id,
             "filename": document.filename,
             "visibility_level": document.visibility_level,
@@ -202,10 +212,20 @@ async def reject_document(
     db.commit()
     
     # Log audit
+    # audit = AuditLog(
+    #     user_id=current_user.id,
+    #     action="document_rejected",
+    #     metadata={
+    #         "document_id": document_id,
+    #         "filename": document.filename,
+    #         "visibility_level": document.visibility_level,
+    #         "notes": request.notes
+    #     }
+    # )
     audit = AuditLog(
         user_id=current_user.id,
         action="document_rejected",
-        metadata={
+        action_metadata={  # ✅ Changed from 'metadata'
             "document_id": document_id,
             "filename": document.filename,
             "visibility_level": document.visibility_level,
