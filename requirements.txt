@@ -39,6 +39,7 @@ python-multipart==0.0.20
 SQLAlchemy==1.4.0
 alembic==1.15.2
 psycopg2-binary==2.9.10
+schedule==1.2.2
 
 # ============================================
 # Supabase Client & Dependencies

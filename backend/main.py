@@ -1,10 +1,16 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from backend.database import engine, Base
-from backend.routers import document_router, chat_router
+from backend.routers import document_router, chat_router, data_source_router
+from Agent.data_ingestion.scheduler import start_scheduler
 from dotenv import load_dotenv
+import logging
 
 load_dotenv()
+
+# Setup logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Create database tables
 Base.metadata.create_all(bind=engine)
@@ -27,6 +33,7 @@ app.add_middleware(
 # Include routers
 app.include_router(document_router.router)
 app.include_router(chat_router.router)
+app.include_router(data_source_router.router)
 
 @app.get("/")
 async def root():
@@ -43,3 +50,10 @@ async def root():
 @app.get("/health")
 async def health_check():
     return {"status": "healthy"}
+
+@app.on_event("startup")
+async def startup_event():
+    """Start background scheduler on app startup"""
+    logger.info("Starting sync scheduler...")
+    start_scheduler(sync_time="02:00")  # Daily sync at 2 AM
+    logger.info("Sync scheduler started")
