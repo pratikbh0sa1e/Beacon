@@ -70,6 +70,11 @@ class HybridRetriever:
             logger.warning("No vector results found")
             return []
         
+        # Debug: Log first result structure
+        if vector_results:
+            logger.debug(f"First result structure: {list(vector_results[0].keys())}")
+            logger.debug(f"First metadata keys: {list(vector_results[0].get('metadata', {}).keys())}")
+        
         # Extract texts and metadata
         texts = []
         metadata_list = []
@@ -78,7 +83,13 @@ class HybridRetriever:
         for result in vector_results:
             metadata = result.get("metadata", {})
             chunk_text = metadata.get("chunk_text", "")
-            if chunk_text:
+            
+            # Handle case where chunk_text might be a dict (shouldn't happen but defensive)
+            if isinstance(chunk_text, dict):
+                logger.warning(f"chunk_text is a dict: {chunk_text}")
+                chunk_text = str(chunk_text)
+            
+            if chunk_text and isinstance(chunk_text, str):
                 texts.append(chunk_text)
                 metadata_list.append(metadata)
                 # Convert L2 distance to similarity (lower is better, so invert)
@@ -89,10 +100,15 @@ class HybridRetriever:
             return []
         
         # 2. BM25 search (keyword)
-        tokenized_corpus = [text.lower().split() for text in texts]
-        bm25 = BM25Okapi(tokenized_corpus)
-        tokenized_query = query.lower().split()
-        bm25_scores = bm25.get_scores(tokenized_query)
+        try:
+            tokenized_corpus = [text.lower().split() for text in texts]
+            bm25 = BM25Okapi(tokenized_corpus)
+            tokenized_query = query.lower().split()
+            bm25_scores = bm25.get_scores(tokenized_query)
+        except AttributeError as e:
+            logger.error(f"Error tokenizing texts: {e}")
+            logger.error(f"Texts type check: {[type(t) for t in texts[:3]]}")
+            raise
         
         # 3. Normalize scores
         norm_vector_scores = self._normalize_scores(vector_scores)

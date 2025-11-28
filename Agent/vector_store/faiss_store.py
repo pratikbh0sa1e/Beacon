@@ -102,14 +102,21 @@ class FAISSVectorStore:
     
     def search(self, query_embedding: List[float], k: int = 5) -> List[Dict]:
         """Search for similar vectors"""
+        if self.index is None or self.index.ntotal == 0:
+            return []
+            
         query_array = np.array([query_embedding]).astype('float32')
         distances, indices = self.index.search(query_array, k)
         
         results = []
         for dist, idx in zip(distances[0], indices[0]):
-            if idx < len(self.metadata_store):
+            if idx < len(self.metadata_store) and idx >= 0:
+                metadata = self.metadata_store[idx]
+                # Ensure metadata is a dict
+                if not isinstance(metadata, dict):
+                    continue
                 results.append({
-                    "metadata": self.metadata_store[idx],
+                    "metadata": metadata,
                     "distance": float(dist)
                 })
         

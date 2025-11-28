@@ -7,18 +7,18 @@ import re
 import glob
 from datetime import datetime
 
-from backend.database import get_db, Document
+from backend.database import get_db, Document, DocumentMetadata
 from backend.utils.text_extractor import extract_text
 from backend.utils.supabase_storage import upload_to_supabase
-from Agent.vector_store.embedding_pipeline import EmbeddingPipeline
+from Agent.metadata.extractor import MetadataExtractor
 
 router = APIRouter(prefix="/documents", tags=["documents"])
 
 UPLOAD_DIR = "backend/files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
-# Initialize embedding pipeline
-embedding_pipeline = EmbeddingPipeline()
+# Initialize metadata extractor
+metadata_extractor = MetadataExtractor()
 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename for Supabase storage"""
@@ -31,13 +31,36 @@ def sanitize_filename(filename: str) -> str:
     safe_name = re.sub(r'_+', '_', safe_name)
     return f"{safe_name}{ext}"
 
-def process_embeddings_background(document_id: int, text: str, metadata: dict):
-    """Background task to process embeddings"""
+def extract_metadata_background(document_id: int, text: str, filename: str, db_session):
+    """Background task to extract metadata"""
     try:
-        result = embedding_pipeline.process_document(text, metadata)
-        print(f"Embedding result for doc {document_id}: {result}")
+        print(f"Extracting metadata for doc {document_id}...")
+        metadata = metadata_extractor.extract_metadata(text, filename)
+        
+        # Create or update metadata record
+        doc_metadata = DocumentMetadata(
+            document_id=document_id,
+            title=metadata.get('title'),
+            department=metadata.get('department'),
+            document_type=metadata.get('document_type'),
+            date_published=metadata.get('date_published'),
+            keywords=metadata.get('keywords'),
+            summary=metadata.get('summary'),
+            key_topics=metadata.get('key_topics'),
+            entities=metadata.get('entities'),
+            bm25_keywords=metadata.get('bm25_keywords'),
+            text_length=metadata.get('text_length'),
+            embedding_status='uploaded',
+            metadata_status='ready'
+        )
+        
+        db_session.add(doc_metadata)
+        db_session.commit()
+        print(f"Metadata extracted for doc {document_id}: {metadata.get('title')}")
+        
     except Exception as e:
-        print(f"Error processing embeddings for doc {document_id}: {str(e)}")
+        print(f"Error extracting metadata for doc {document_id}: {str(e)}")
+        db_session.rollback()
 
 
 @router.post("/upload")
@@ -108,20 +131,17 @@ async def upload_documents(
                 except Exception as retry_error:
                     raise Exception(f"Database error after retry: {str(retry_error)}")
             
-            # Trigger background embedding task
-            embedding_metadata = {
-                "document_id": doc.id,
-                "filename": file.filename,
-                "file_type": file_ext,
-                "source_department": source_department
-            }
-            
+            # Trigger background metadata extraction
             if background_tasks:
+                # Create a new session for background task
+                from backend.database import SessionLocal
+                bg_db = SessionLocal()
                 background_tasks.add_task(
-                    process_embeddings_background,
+                    extract_metadata_background,
                     doc.id,
                     extracted_text,
-                    embedding_metadata
+                    file.filename,
+                    bg_db
                 )
             
             results.append({
@@ -130,7 +150,8 @@ async def upload_documents(
                 "document_id": doc.id,
                 "s3_url": s3_url,
                 "text_length": len(extracted_text),
-                "embedding_status": "processing"
+                "metadata_status": "processing",
+                "embedding_status": "not_embedded"
             })
             
         except Exception as e:
@@ -205,34 +226,125 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document not found")
     return doc
 
-@router.post("/reprocess-embeddings/{document_id}")
-async def reprocess_embeddings(
-    document_id: int,
-    db: Session = Depends(get_db),
-    background_tasks: BackgroundTasks = None,
-    source_department: str = "Unknown"
-):
-    """Manually trigger embedding reprocessing for a document"""
+@router.get("/{document_id}/status")
+async def get_document_status(document_id: int, db: Session = Depends(get_db)):
+    """Get document processing status"""
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
     
-    embedding_metadata = {
-        "document_id": doc.id,
-        "filename": doc.filename,
-        "file_type": doc.file_type,
-        "source_department": source_department
-    }
+    # Get metadata if exists
+    metadata = db.query(DocumentMetadata).filter(DocumentMetadata.document_id == document_id).first()
     
-    background_tasks.add_task(
-        process_embeddings_background,
-        doc.id,
-        doc.extracted_text,
-        embedding_metadata
-    )
+    if not metadata:
+        return {
+            "doc_id": document_id,
+            "status": "uploaded",
+            "metadata_extracted": False,
+            "embedding_status": "not_embedded",
+            "estimated_wait": 3  # seconds for metadata extraction
+        }
     
     return {
-        "status": "success",
-        "message": "Embedding reprocessing triggered",
-        "document_id": document_id
+        "doc_id": document_id,
+        "status": metadata.metadata_status,
+        "metadata_extracted": metadata.metadata_status == "ready",
+        "embedding_status": metadata.embedding_status,
+        "title": metadata.title,
+        "department": metadata.department,
+        "document_type": metadata.document_type,
+        "estimated_wait": 0 if metadata.metadata_status == "ready" else 2
+    }
+
+@router.get("/browse/metadata")
+async def browse_documents(
+    department: str = None,
+    document_type: str = None,
+    year: int = None,
+    limit: int = 50,
+    offset: int = 0,
+    db: Session = Depends(get_db)
+):
+    """Browse documents by metadata filters"""
+    query = db.query(DocumentMetadata).join(Document)
+    
+    # Apply filters
+    if department:
+        query = query.filter(DocumentMetadata.department.ilike(f"%{department}%"))
+    if document_type:
+        query = query.filter(DocumentMetadata.document_type == document_type)
+    if year:
+        from sqlalchemy import extract
+        query = query.filter(extract('year', DocumentMetadata.date_published) == year)
+    
+    # Get total count
+    total = query.count()
+    
+    # Apply pagination
+    results = query.offset(offset).limit(limit).all()
+    
+    # Format response
+    documents = []
+    for metadata in results:
+        documents.append({
+            "doc_id": metadata.document_id,
+            "title": metadata.title,
+            "department": metadata.department,
+            "document_type": metadata.document_type,
+            "date_published": str(metadata.date_published) if metadata.date_published else None,
+            "summary": metadata.summary,
+            "keywords": metadata.keywords[:5] if metadata.keywords else [],
+            "embedding_status": metadata.embedding_status,
+            "filename": metadata.document.filename
+        })
+    
+    return {
+        "total": total,
+        "limit": limit,
+        "offset": offset,
+        "documents": documents
+    }
+
+@router.post("/embed")
+async def embed_documents(
+    doc_ids: List[int],
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
+    """Manually trigger embedding for specific documents"""
+    from Agent.lazy_rag.lazy_embedder import LazyEmbedder
+    
+    # Validate documents exist
+    docs = db.query(Document).filter(Document.id.in_(doc_ids)).all()
+    if len(docs) != len(doc_ids):
+        raise HTTPException(status_code=404, detail="One or more documents not found")
+    
+    # Trigger embedding in background
+    def embed_batch():
+        embedder = LazyEmbedder()
+        documents_to_embed = [
+            {"id": doc.id, "text": doc.extracted_text, "filename": doc.filename}
+            for doc in docs
+        ]
+        results = embedder.embed_documents_batch(documents_to_embed)
+        
+        # Update metadata status
+        from backend.database import SessionLocal
+        bg_db = SessionLocal()
+        for result in results:
+            if result['status'] == 'success':
+                metadata = bg_db.query(DocumentMetadata).filter(
+                    DocumentMetadata.document_id == result['doc_id']
+                ).first()
+                if metadata:
+                    metadata.embedding_status = 'embedded'
+                    bg_db.commit()
+        bg_db.close()
+    
+    background_tasks.add_task(embed_batch)
+    
+    return {
+        "status": "embedding_started",
+        "doc_ids": doc_ids,
+        "estimated_time": len(doc_ids) * 2  # ~2 seconds per document
     }

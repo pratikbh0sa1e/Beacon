@@ -11,13 +11,12 @@ from langchain.tools import Tool
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain import hub
 
-from Agent.tools.search_tools import (
-    search_documents,
-    search_specific_document,
-    get_document_metadata
+from Agent.tools.lazy_search_tools import (
+    search_documents_lazy,
+    search_specific_document_lazy
 )
+from Agent.tools.search_tools import get_document_metadata
 from Agent.tools.analysis_tools import compare_policies, summarize_document
-from Agent.tools.web_search_tool import web_search
 
 # Setup logging
 log_dir = Path("Agent/agent_logs")
@@ -63,17 +62,17 @@ class PolicyRAGAgent:
             convert_system_message_to_human=True
         )
         
-        # Define tools
+        # Define tools (using lazy search)
         self.tools = [
             Tool(
                 name="search_documents",
-                func=search_documents,
-                description="Search across all policy documents using semantic and keyword search. Use this for general questions about policies."
+                func=search_documents_lazy,
+                description="Search across all policy documents using semantic and keyword search with lazy embedding. Use this for general questions about policies. This is your primary tool for finding information."
             ),
             Tool(
                 name="search_specific_document",
-                func=lambda args: search_specific_document(**eval(args)),
-                description="Search within a specific document by ID. Use when you know which document to search. Input: {'document_id': int, 'query': str}"
+                func=lambda args: search_specific_document_lazy(**eval(args)),
+                description="Search within a specific document by ID with lazy embedding. Use when you know which document to search. Input: {'document_id': int, 'query': str}"
             ),
             Tool(
                 name="compare_policies",
@@ -89,11 +88,6 @@ class PolicyRAGAgent:
                 name="summarize_document",
                 func=lambda args: summarize_document(**eval(args)),
                 description="Generate a summary of a document. Input: {'document_id': int, 'focus': str}"
-            ),
-            Tool(
-                name="web_search",
-                func=web_search,
-                description="Search the web for additional information. Use when document search doesn't provide enough context."
             )
         ]
         

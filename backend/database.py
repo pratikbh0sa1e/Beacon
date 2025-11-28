@@ -1,6 +1,7 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY
 from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, relationship
+from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -45,6 +46,45 @@ class Document(Base):
     extracted_text = Column(Text)
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     doc_metadata = Column(Text, nullable=True)
+    
+    # Relationship to metadata (use doc_metadata_rel to avoid reserved name)
+    doc_metadata_rel = relationship("DocumentMetadata", back_populates="document", uselist=False, cascade="all, delete-orphan")
+
+
+class DocumentMetadata(Base):
+    __tablename__ = "document_metadata"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, unique=True)
+    
+    # Auto-extracted metadata
+    title = Column(String(500), nullable=True)
+    department = Column(String(200), nullable=True, index=True)
+    document_type = Column(String(100), nullable=True, index=True)
+    date_published = Column(Date, nullable=True)
+    keywords = Column(ARRAY(Text), nullable=True)
+    
+    # LLM-generated metadata
+    summary = Column(Text, nullable=True)
+    key_topics = Column(ARRAY(Text), nullable=True)
+    entities = Column(JSONB, nullable=True)
+    
+    # Status tracking
+    embedding_status = Column(String(20), nullable=False, default='uploaded', index=True)
+    metadata_status = Column(String(20), nullable=False, default='processing', index=True)
+    last_accessed = Column(DateTime, nullable=True)
+    access_count = Column(Integer, nullable=False, default=0)
+    
+    # Search optimization
+    bm25_keywords = Column(Text, nullable=True)
+    text_length = Column(Integer, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    document = relationship("Document", back_populates="doc_metadata_rel")
 
 def get_db():
     db = SessionLocal()
