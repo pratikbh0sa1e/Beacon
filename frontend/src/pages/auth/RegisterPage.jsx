@@ -49,7 +49,7 @@ export const RegisterPage = () => {
       label: "University Admin",
       needsInstitution: true,
     },
-    { value: "moe_admin", label: "Ministry Admin", needsInstitution: true },
+    { value: "moe_admin", label: "Ministry Admin", needsInstitution: false },
     { value: "public_viewer", label: "Public Viewer", needsInstitution: false },
     // Developer role is NOT included - it's only created via backend initialization
   ];
@@ -60,7 +60,7 @@ export const RegisterPage = () => {
 
   const fetchInstitutions = async () => {
     try {
-      const response = await institutionAPI.listInstitutions();
+      const response = await institutionAPI.list();
       setInstitutions(response.data || []);
     } catch (error) {
       console.error("Error fetching institutions:", error);

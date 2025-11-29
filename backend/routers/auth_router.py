@@ -79,7 +79,7 @@ def decode_token(token: str):
         return payload
     except jwt.ExpiredSignatureError:
         raise HTTPException(status_code=401, detail="Token has expired")
-    except jwt.JWTError:
+    except jwt.PyJWTError:
         raise HTTPException(status_code=401, detail="Invalid token")
 
 
@@ -120,7 +120,7 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
         raise HTTPException(status_code=400, detail="Email already registered")
     
     # Validate institution requirement
-    roles_needing_institution = ["student", "document_officer", "university_admin", "moe_admin"]
+    roles_needing_institution = ["student", "document_officer", "university_admin"]
     if request.role in roles_needing_institution and not request.institution_id:
         raise HTTPException(status_code=400, detail=f"Institution ID required for {request.role}")
     
@@ -172,7 +172,7 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Create access token
     access_token = create_access_token(
         data={
-            "sub": user.id,
+            "sub": str(user.id),
             "email": user.email,
             "role": user.role,
             "institution_id": user.institution_id,

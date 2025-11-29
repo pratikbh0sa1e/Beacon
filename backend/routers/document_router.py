@@ -65,7 +65,8 @@ def extract_metadata_background(document_id: int, text: str, filename: str, db_s
 
 @router.post("/upload")
 async def upload_documents(
-    files: List[UploadFile] = File(...),
+    # files: List[UploadFile] = File(...),
+    file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),

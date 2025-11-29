@@ -101,7 +101,7 @@ class Document(Base):
     # Levels: public, institution_only, restricted, confidential
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True)
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=True)
-    
+    download_allowed = Column(Boolean, default=False, nullable=False)
     # Approval workflow
     approval_status = Column(String(50), default="pending", index=True)
     # Status: pending, approved, rejected

@@ -31,7 +31,7 @@ class AssignUserRequest(BaseModel):
 @router.get("/list", response_model=List[InstitutionResponse])
 async def list_institutions(
     type: Optional[str] = None,
-    current_user: User = Depends(get_current_user),
+    # current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
