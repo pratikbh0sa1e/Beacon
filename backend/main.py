@@ -9,7 +9,8 @@ from backend.routers import (
     approval_router,
     chat_router,
     audit_router,
-    data_source_router
+    data_source_router,
+    voice_router
 )
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
@@ -54,6 +55,7 @@ app.include_router(institution_router.router, prefix="/institutions", tags=["ins
 app.include_router(document_router.router, prefix="/documents", tags=["documents"])
 app.include_router(approval_router.router, prefix="/approvals", tags=["approvals"])
 app.include_router(chat_router.router, prefix="/chat", tags=["chat"])
+app.include_router(voice_router.router, tags=["voice"])  # Voice query support
 app.include_router(audit_router.router, prefix="/audit", tags=["audit"])
 app.include_router(data_source_router.router, prefix="/data-sources", tags=["data-sources"])
 

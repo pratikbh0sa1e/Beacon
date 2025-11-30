@@ -367,7 +367,7 @@ async def upload_documents(
     try:
         # 1. Validate file type
         file_ext = file.filename.split(".")[-1].lower()
-        if file_ext not in ["pdf", "docx", "jpeg", "jpg", "png", "txt"]:
+        if file_ext not in ["pdf", "docx", "pptx", "jpeg", "jpg", "png", "txt"]:
             raise ValueError(f"Unsupported file type: {file_ext}")
         
         # 2. Save file locally

@@ -48,7 +48,7 @@ Documents are hashed (SHA256) based on filename + content. If the same document 
 Each chunk stores:
 - `document_id`: Database ID
 - `filename`: Original filename
-- `file_type`: pdf/docx/jpeg/png
+- `file_type`: pdf/docx/pptx/jpeg/png
 - `source_department`: Department/ministry
 - `chunk_index`: Position in document
 - `chunk_size`: Size of this chunk

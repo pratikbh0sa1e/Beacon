@@ -109,7 +109,7 @@ class ExternalDocumentProcessor:
         try:
             # Determine file type
             file_ext = filename.split(".")[-1].lower()
-            if file_ext not in ["pdf", "docx", "jpeg", "jpg", "png"]:
+            if file_ext not in ["pdf", "docx", "pptx", "jpeg", "jpg", "png"]:
                 return {
                     "status": "error",
                     "filename": filename,

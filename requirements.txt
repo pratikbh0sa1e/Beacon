@@ -56,12 +56,20 @@ supafunc==0.9.4
 # ============================================
 PyMuPDF==1.25.2
 python-docx==1.1.2
+python-pptx==1.0.2
 Pillow==11.1.0
 easyocr==1.7.2
 opencv-python-headless==4.12.0.88
 scikit-image==0.25.2
 python-bidi==0.6.7
 lxml==6.0.2
+
+# ============================================
+# Voice/Audio Processing
+# ============================================
+openai-whisper==20231117
+ffmpeg-python==0.2.0
+google-cloud-speech==2.26.0
 
 # ============================================
 # Vector Embeddings & Search
