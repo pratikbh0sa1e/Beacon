@@ -1,8 +1,10 @@
 """ReAct agent with LangGraph for policy Q&A"""
 import logging
-from typing import TypedDict, Annotated, Sequence
+from typing import TypedDict, Annotated, Sequence, AsyncGenerator
 from pathlib import Path
 import operator
+import time
+import asyncio
 
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
@@ -10,6 +12,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain.tools import Tool
 from langchain.agents import AgentExecutor, create_react_agent
 from langchain import hub
+from langchain.callbacks.base import BaseCallbackHandler
 
 from Agent.tools.lazy_search_tools import (
     search_documents_lazy,
@@ -29,6 +32,32 @@ logging.basicConfig(
     ]
 )
 logger = logging.getLogger(__name__)
+
+
+class StreamingCallbackHandler(BaseCallbackHandler):
+    """Callback handler for streaming LLM tokens"""
+    
+    def __init__(self):
+        self.tokens = []
+        self.token_queue = asyncio.Queue()
+        
+    def on_llm_new_token(self, token: str, **kwargs):
+        """Called when LLM generates a new token"""
+        self.tokens.append(token)
+        # Put token in queue for async consumption
+        try:
+            loop = asyncio.get_event_loop()
+            loop.call_soon_threadsafe(self.token_queue.put_nowait, token)
+        except:
+            pass
+    
+    async def get_token(self):
+        """Get next token from queue"""
+        return await self.token_queue.get()
+    
+    def has_tokens(self):
+        """Check if there are tokens in queue"""
+        return not self.token_queue.empty()
 
 
 class AgentState(TypedDict):
@@ -81,8 +110,8 @@ class PolicyRAGAgent:
             ),
             Tool(
                 name="get_document_metadata",
-                func=get_document_metadata,
-                description="Get metadata about documents. Pass document_id or leave empty for all documents."
+                func=lambda args="": get_document_metadata() if not args or str(args).strip() in ["{}", "", "None"] else get_document_metadata(int(args)),
+                description="Get metadata about all documents in the system. Leave input empty to get all documents. Example: just call the tool without arguments."
             ),
             Tool(
                 name="summarize_document",
@@ -130,7 +159,23 @@ class PolicyRAGAgent:
         logger.info(f"Processing query: {state['query']}")
         
         try:
-            result = self.agent_executor.invoke({"input": state["query"]})
+            # Build context from previous messages for conversation continuity
+            chat_history = state.get("messages", [])
+            
+            # Format chat history for context (last 5 messages to avoid token limits)
+            context_messages = chat_history[-10:] if len(chat_history) > 10 else chat_history
+            
+            # Build input with conversation context
+            if len(context_messages) > 1:  # More than just current message
+                history_text = "\n".join([
+                    f"{'User' if msg['role'] == 'user' else 'Assistant'}: {msg['content']}"
+                    for msg in context_messages[:-1]  # Exclude current message
+                ])
+                input_with_context = f"Previous conversation:\n{history_text}\n\nCurrent question: {state['query']}"
+            else:
+                input_with_context = state["query"]
+            
+            result = self.agent_executor.invoke({"input": input_with_context})
             
             state["response"] = result.get("output", "No response generated")
             state["messages"].append({
@@ -238,4 +283,72 @@ class PolicyRAGAgent:
                 "citations": [],
                 "confidence": 0.0,
                 "status": "error"
+            }
+    
+    async def query_stream(self, question: str, thread_id: str = "default") -> AsyncGenerator[dict, None]:
+        """
+        Query the agent with streaming response
+        
+        Args:
+            question: User question
+            thread_id: Thread ID for conversation memory
+        
+        Yields:
+            Stream events:
+            - {"type": "content", "token": "...", "timestamp": ...}
+            - {"type": "citation", "citation": {...}, "timestamp": ...}
+            - {"type": "metadata", "confidence": 0.95, "status": "success", "timestamp": ...}
+        
+        Note: This uses the graph with MemorySaver checkpointer to maintain conversation history
+        """
+        logger.info(f"Streaming query received: '{question}'")
+        
+        try:
+            # Use the query method which properly uses the graph with memory
+            # The graph.invoke() with thread_id config enables conversation memory via MemorySaver
+            result = await asyncio.to_thread(self.query, question, thread_id)
+            
+            # Get the answer
+            answer = result.get("answer", "")
+            citations = result.get("citations", [])
+            confidence = result.get("confidence", 0.0)
+            
+            # Stream the answer word by word
+            words = answer.split()
+            for i, word in enumerate(words):
+                # Add space except for first word
+                token = word if i == 0 else f" {word}"
+                
+                yield {
+                    "type": "content",
+                    "token": token,
+                    "timestamp": time.time()
+                }
+                
+                # Small delay to simulate streaming (adjust for faster/slower streaming)
+                await asyncio.sleep(0.05)
+            
+            # Send citations
+            for citation in citations:
+                yield {
+                    "type": "citation",
+                    "citation": citation,
+                    "timestamp": time.time()
+                }
+            
+            # Send final metadata
+            yield {
+                "type": "metadata",
+                "confidence": confidence,
+                "status": result.get("status", "success"),
+                "timestamp": time.time()
+            }
+            
+        except Exception as e:
+            logger.error(f"Error in streaming query: {str(e)}")
+            yield {
+                "type": "error",
+                "message": str(e),
+                "recoverable": False,
+                "timestamp": time.time()
             }

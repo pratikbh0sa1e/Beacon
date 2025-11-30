@@ -3,9 +3,11 @@ Voice query router for speech-to-text and RAG integration
 Allows users to ask questions via voice/audio
 """
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import Optional
+from typing import Optional, AsyncGenerator
 import logging
+import json
 from datetime import datetime
 
 from backend.database import get_db, User
@@ -23,6 +25,141 @@ load_dotenv()
 router = APIRouter(prefix="/voice", tags=["voice"])
 
 logger = logging.getLogger(__name__)
+
+
+async def generate_voice_stream(
+    transcribed_text: str,
+    thread_id: str,
+    detected_language: str,
+    confidence: float
+) -> AsyncGenerator[str, None]:
+    """Generate SSE stream for voice query response"""
+    try:
+        # First send transcription info
+        transcription_data = {
+            "type": "transcription",
+            "text": transcribed_text,
+            "language": detected_language,
+            "confidence": confidence,
+            "engine": ACTIVE_ENGINE
+        }
+        yield f"data: {json.dumps(transcription_data)}\n\n"
+        
+        # Initialize agent
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise ValueError("GOOGLE_API_KEY not configured")
+        
+        agent = PolicyRAGAgent(google_api_key=google_api_key, temperature=0.1)
+        
+        # Stream the response
+        async for chunk in agent.query_stream(transcribed_text, thread_id):
+            yield f"data: {json.dumps(chunk)}\n\n"
+        
+        # Send done signal
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+    except Exception as e:
+        error_data = {
+            "type": "error",
+            "message": str(e),
+            "recoverable": False
+        }
+        yield f"data: {json.dumps(error_data)}\n\n"
+
+
+@router.post("/query/stream")
+async def voice_query_stream(
+    audio: UploadFile = File(...),
+    language: Optional[str] = Form(None),
+    thread_id: Optional[str] = Form(None),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Process voice query with streaming response (SSE)
+    
+    Args:
+        audio: Audio file (MP3, WAV, M4A, OGG, FLAC)
+        language: Language code (e.g., 'en', 'hi') or None for auto-detect
+        thread_id: Optional conversation thread ID
+        
+    Returns:
+        Server-Sent Events stream with transcription and AI response
+    """
+    try:
+        # Validate file format
+        file_ext = audio.filename.split(".")[-1].lower()
+        if not is_format_supported(file_ext):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Unsupported audio format: {file_ext}"
+            )
+        
+        logger.info(f"Processing streaming voice query from user {current_user.id}")
+        
+        # Normalize language parameter
+        if language:
+            language = language.strip().lower()
+            if language in ["null", "none", ""]:
+                language = None
+            elif language == "english":
+                language = "en"
+            elif language == "hindi":
+                language = "hi"
+            elif len(language) > 2:
+                logger.warning(f"Invalid language format '{language}', using auto-detect")
+                language = None
+        
+        # Read audio bytes
+        audio_bytes = await audio.read()
+        
+        # Get transcription service
+        transcription_service = get_transcription_service()
+        
+        # Transcribe audio
+        logger.info(f"Transcribing audio with language: {language or 'auto-detect'}...")
+        transcription_result = transcription_service.transcribe_from_bytes(
+            audio_bytes=audio_bytes,
+            file_extension=file_ext,
+            language=language
+        )
+        
+        transcribed_text = transcription_result["text"]
+        detected_language = transcription_result["language"]
+        confidence = transcription_result.get("confidence")
+        
+        logger.info(f"✅ Transcription: '{transcribed_text}'")
+        
+        if not transcribed_text:
+            raise HTTPException(
+                status_code=400,
+                detail="No speech detected in audio file"
+            )
+        
+        # Use thread_id if provided
+        if not thread_id:
+            thread_id = f"voice_{current_user.id}_{int(datetime.now().timestamp())}"
+        
+        # Return streaming response
+        return StreamingResponse(
+            generate_voice_stream(transcribed_text, thread_id, detected_language, confidence),
+            media_type="text/event-stream",
+            headers={
+                "Cache-Control": "no-cache",
+                "Connection": "keep-alive",
+                "X-Accel-Buffering": "no"
+            }
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Voice query stream failed: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Voice query processing failed: {str(e)}"
+        )
 
 
 @router.post("/query")

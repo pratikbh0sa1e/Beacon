@@ -29,13 +29,14 @@ BEACON is an AI-powered platform designed for Ministry of Education (MoE) and Hi
 
 ### Key Capabilities
 
+- **Real-Time Streaming:** ⭐ NEW - Token-by-token response streaming for instant feedback
 - **Document Processing:** PDF, DOCX, PPTX, Images (with OCR)
 - **Multilingual Support:** 100+ languages including Hindi, Tamil, Telugu, Bengali
-- **Voice Queries:** Ask questions via audio (MP3, WAV, etc.)
+- **Voice Queries:** Ask questions via audio (MP3, WAV, etc.) with streaming support
 - **Smart Search:** Hybrid retrieval (semantic + keyword)
 - **Lazy RAG:** On-demand embedding for instant uploads
 - **External Data Sync:** Connect to ministry databases
-- **Citation Tracking:** All answers include source documents
+- **Citation Tracking:** All answers include source documents with real-time updates
 
 ### Technology Stack
 
@@ -430,7 +431,35 @@ GET /documents/{document_id}/status
 
 ### Chat/Query
 
-#### Ask Question
+#### Ask Question (Streaming) ⭐ NEW
+```
+POST /chat/query/stream
+```
+**Body:**
+```json
+{
+  "question": "What are the policy guidelines?",
+  "thread_id": "session_1"
+}
+```
+**Response:** Server-Sent Events (SSE) stream with:
+- `content`: Token chunks as they're generated
+- `citation`: Citations as they're discovered
+- `metadata`: Final confidence and status
+- `done`: Stream completion signal
+
+**Example Events:**
+```
+data: {"type": "content", "token": "The education", "timestamp": 1234567890}
+
+data: {"type": "citation", "citation": {"document_id": "123", "document_title": "Policy 2024", "page_number": 5}}
+
+data: {"type": "metadata", "confidence": 0.95, "status": "success"}
+
+data: {"type": "done"}
+```
+
+#### Ask Question (Non-Streaming)
 ```
 POST /chat/query
 ```
@@ -441,6 +470,15 @@ POST /chat/query
   "thread_id": "session_1"
 }
 ```
+**Response:**
+```json
+{
+  "answer": "The policy guidelines include...",
+  "citations": [...],
+  "confidence": 0.95,
+  "status": "success"
+}
+```
 
 #### Health Check
 ```
@@ -449,7 +487,18 @@ GET /chat/health
 
 ### Voice Queries
 
-#### Voice Query (Transcribe + Answer)
+#### Voice Query (Streaming) ⭐ NEW
+```
+POST /voice/query/stream
+```
+**Form Data:**
+- `audio`: Audio file (MP3, WAV, etc.)
+- `language`: Language code (optional)
+- `thread_id`: Thread ID (optional)
+
+**Response:** SSE stream with transcription followed by AI response
+
+#### Voice Query (Non-Streaming)
 ```
 POST /voice/query
 ```

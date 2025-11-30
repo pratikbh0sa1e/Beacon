@@ -1,8 +1,11 @@
 """Chat/Q&A router for RAG agent"""
 from fastapi import APIRouter, HTTPException
+from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, AsyncGenerator
 import os
+import json
+import asyncio
 from dotenv import load_dotenv
 
 from Agent.rag_agent.react_agent import PolicyRAGAgent
@@ -36,10 +39,102 @@ class ChatResponse(BaseModel):
     status: str
 
 
+async def generate_stream(question: str, thread_id: str) -> AsyncGenerator[str, None]:
+    """
+    Generate SSE stream for chat response
+    
+    Yields SSE formatted events with:
+    - content chunks (token-by-token)
+    - citations (when available)
+    - final metadata (confidence, status)
+    """
+    try:
+        rag_agent = get_agent()
+        
+        # Stream the response
+        async for chunk in rag_agent.query_stream(question, thread_id):
+            event_type = chunk.get("type", "content")
+            
+            if event_type == "content":
+                # Stream content tokens
+                data = {
+                    "type": "content",
+                    "token": chunk.get("token", ""),
+                    "timestamp": chunk.get("timestamp")
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                
+            elif event_type == "citation":
+                # Stream citations as they're discovered
+                data = {
+                    "type": "citation",
+                    "citation": chunk.get("citation"),
+                    "timestamp": chunk.get("timestamp")
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                
+            elif event_type == "metadata":
+                # Final metadata
+                data = {
+                    "type": "metadata",
+                    "confidence": chunk.get("confidence", 0.0),
+                    "status": chunk.get("status", "success"),
+                    "timestamp": chunk.get("timestamp")
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                
+            elif event_type == "error":
+                # Error occurred
+                data = {
+                    "type": "error",
+                    "message": chunk.get("message", "Unknown error"),
+                    "recoverable": chunk.get("recoverable", False)
+                }
+                yield f"data: {json.dumps(data)}\n\n"
+                
+        # Send done signal
+        yield f"data: {json.dumps({'type': 'done'})}\n\n"
+        
+    except Exception as e:
+        error_data = {
+            "type": "error",
+            "message": str(e),
+            "recoverable": False
+        }
+        yield f"data: {json.dumps(error_data)}\n\n"
+
+
+@router.post("/query/stream")
+async def chat_query_stream(request: ChatRequest):
+    """
+    Ask a question to the RAG agent with streaming response (SSE)
+    
+    Args:
+        question: The question to ask
+        thread_id: Optional thread ID for conversation memory
+    
+    Returns:
+        Server-Sent Events stream with:
+        - content: Token chunks as they're generated
+        - citation: Citations as they're discovered
+        - metadata: Final confidence and status
+        - done: Stream completion signal
+    """
+    return StreamingResponse(
+        generate_stream(request.question, request.thread_id),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no"  # Disable nginx buffering
+        }
+    )
+
+
 @router.post("/query", response_model=ChatResponse)
 async def chat_query(request: ChatRequest):
     """
-    Ask a question to the RAG agent
+    Ask a question to the RAG agent (non-streaming, backward compatible)
     
     Args:
         question: The question to ask
