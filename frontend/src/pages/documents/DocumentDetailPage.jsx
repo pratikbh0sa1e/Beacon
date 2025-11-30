@@ -9,8 +9,9 @@ import {
   Calendar,
   Building2,
   Shield,
+  Star,
 } from "lucide-react";
-import { documentAPI } from "../../services/api";
+import { documentAPI, bookmarkAPI } from "../../services/api";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { Button } from "../../components/ui/button";
 import {
@@ -30,10 +31,12 @@ export const DocumentDetailPage = () => {
   // const [document, setDocument] = useState(null);
   const [docData, setDocData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isBookmarked, setIsBookmarked] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchDocument();
+      checkBookmarkStatus();
     }
   }, [id]);
 
@@ -50,16 +53,52 @@ export const DocumentDetailPage = () => {
     }
   };
 
+  // ✅ Check if this doc is in user's bookmarks
+  const checkBookmarkStatus = async () => {
+    try {
+      const response = await bookmarkAPI.list();
+      const bookmarkedIds = response.data; // Array of IDs
+      setIsBookmarked(bookmarkedIds.includes(parseInt(id)));
+    } catch (error) {
+      console.error("Error checking bookmark:", error);
+    }
+  };
+
+  // ✅ Handle Bookmark Toggle
+  const toggleBookmark = async () => {
+    try {
+      const response = await bookmarkAPI.toggle(id);
+      setIsBookmarked(response.data.status === "added");
+      toast.success(response.data.message);
+    } catch (error) {
+      toast.error("Failed to update bookmark");
+    }
+  };
+
   const handleDownload = async () => {
     try {
       const response = await documentAPI.downloadDocument(id);
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+
+      // Extract filename from Content-Disposition header if available
+      const contentDisposition = response.headers["content-disposition"];
+      let filename = docData.title;
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // response.data is already a Blob, don't wrap it again
+      const url = window.URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", docData.title);
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url); // Clean up
       toast.success("Document downloaded successfully");
     } catch (error) {
       console.error("Download error:", error);
@@ -100,6 +139,20 @@ export const DocumentDetailPage = () => {
             <Badge variant="outline">{docData.visibility}</Badge>
           </div>
         </div>
+
+        {/* ✅ Bookmark Button */}
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={toggleBookmark}
+          className={
+            isBookmarked
+              ? "text-yellow-500 border-yellow-500/50 bg-yellow-500/10"
+              : "text-muted-foreground"
+          }
+        >
+          <Star className={`h-5 w-5 ${isBookmarked ? "fill-current" : ""}`} />
+        </Button>
 
         {/* ✅ Show Download Button only if allowed */}
         {docData.download_allowed && (
@@ -177,9 +230,7 @@ export const DocumentDetailPage = () => {
                 <Shield className="h-5 w-5 text-muted-foreground" />
                 <div>
                   <p className="text-sm text-muted-foreground">Visibility</p>
-                  <p className="font-medium capitalize">
-                    {docData.visibility}
-                  </p>
+                  <p className="font-medium capitalize">{docData.visibility}</p>
                 </div>
               </div>
 

@@ -1,25 +1,65 @@
-import React from "react";
+// App.jsx
+
+import React, { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
+import { Toaster } from "sonner";
 import { useAuthStore } from "./stores/authStore";
+import { useThemeStore } from "./stores/themeStore";
 import { PublicRoute } from "./middleware/PublicRoute";
 import { ProtectedRoute } from "./middleware/ProtectedRoute";
 import { MainLayout } from "./components/layout/MainLayout";
+import { SessionWarningModal } from "./components/auth/SessionWarningModal";
+import { ActivityTracker } from "./components/auth/ActivityTracker";
+
+// Auth Pages
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
 import { PendingApprovalPage } from "./pages/auth/PendingApprovalPage";
+
+// Main Pages
 import { DashboardPage } from "./pages/DashboardPage";
+
+// Document Pages
 import { DocumentExplorerPage } from "./pages/documents/DocumentExplorerPage";
 import { DocumentDetailPage } from "./pages/documents/DocumentDetailPage";
 import { DocumentUploadPage } from "./pages/documents/DocumentUploadPage";
+
+// AI Chat
 import { AIChatPage } from "./pages/AIChatPage";
+
+// Admin Pages
 import { UserManagementPage } from "./pages/admin/UserManagementPage";
-import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "./constants/roles";
-import { Toaster } from "./components/ui/sonner";
 import { InstitutionsPage } from "./pages/admin/InstitutionsPage";
+import { DocumentApprovalsPage } from "./pages/admin/DocumentApprovalsPage";
+import { AnalyticsPage } from "./pages/admin/AnalyticsPage";
+import { SystemHealthPage } from "./pages/admin/SystemHealthPage";
+
+// Bookmark Page
+import { BookmarksPage } from "./pages/BookmarksPage";
+
+// User Pages
+import { ProfilePage } from "./pages/ProfilePage";
+import { SettingsPage } from "./pages/SettingsPage";
+
+// Constants
+import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "./constants/roles";
+
 const App = () => {
+  const initTheme = useThemeStore((state) => state.initTheme);
+  const initAuth = useAuthStore((state) => state.initAuth);
+  const theme = useThemeStore((state) => state.theme);
+
+  useEffect(() => {
+    initTheme();
+    initAuth();
+  }, [initTheme, initAuth]);
+
   return (
     <BrowserRouter>
-      <Toaster position="top-right" richColors />
+      <ActivityTracker />
+      <SessionWarningModal />
+      <Toaster position="top-right" richColors closeButton theme={theme} />
+
       <Routes>
         <Route
           path="/login"
@@ -29,6 +69,7 @@ const App = () => {
             </PublicRoute>
           }
         />
+
         <Route
           path="/register"
           element={
@@ -37,6 +78,7 @@ const App = () => {
             </PublicRoute>
           }
         />
+
         <Route
           path="/pending-approval"
           element={
@@ -55,8 +97,12 @@ const App = () => {
           }
         >
           <Route index element={<DashboardPage />} />
-          <Route path="documents" element={<DocumentExplorerPage />} />
-          <Route path="documents/:id" element={<DocumentDetailPage />} />
+
+          <Route path="documents">
+            <Route index element={<DocumentExplorerPage />} />
+            <Route path=":id" element={<DocumentDetailPage />} />
+          </Route>
+          <Route path="bookmarks" element={<BookmarksPage />} />
           <Route
             path="upload"
             element={
@@ -65,23 +111,62 @@ const App = () => {
               </ProtectedRoute>
             }
           />
+
           <Route path="ai-chat" element={<AIChatPage />} />
-          <Route
-            path="admin/users"
-            element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
-                <UserManagementPage />
-              </ProtectedRoute>
-            }
-          />
-          <Route
-            path="admin/institutions"
-            element={
-              <ProtectedRoute allowedRoles={ADMIN_ROLES}>
-                <InstitutionsPage />
-              </ProtectedRoute>
-            }
-          />
+
+          <Route path="profile" element={<ProfilePage />} />
+          <Route path="settings" element={<SettingsPage />} />
+
+          <Route path="admin">
+            <Route
+              path="users"
+              element={
+                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                  <UserManagementPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="institutions"
+              element={
+                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                  <InstitutionsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="approvals"
+              element={
+                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                  <DocumentApprovalsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="analytics"
+              element={
+                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                  <AnalyticsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="system"
+              element={
+                <ProtectedRoute allowedRoles={["developer"]}>
+                  <SystemHealthPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route index element={<Navigate to="/admin/users" replace />} />
+          </Route>
+
+          <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

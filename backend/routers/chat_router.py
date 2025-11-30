@@ -1,11 +1,13 @@
 """Chat/Q&A router for RAG agent"""
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
 import os
 from dotenv import load_dotenv
 
 from Agent.rag_agent.react_agent import PolicyRAGAgent
+from backend.database import User
+from backend.routers.auth_router import get_current_user
 
 load_dotenv()
 
@@ -37,7 +39,10 @@ class ChatResponse(BaseModel):
 
 
 @router.post("/query", response_model=ChatResponse)
-async def chat_query(request: ChatRequest):
+async def chat_query(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     Ask a question to the RAG agent
     
@@ -47,6 +52,8 @@ async def chat_query(request: ChatRequest):
     
     Returns:
         Answer with citations and confidence score
+    
+    Requires authentication - all authenticated users can query
     """
     try:
         rag_agent = get_agent()

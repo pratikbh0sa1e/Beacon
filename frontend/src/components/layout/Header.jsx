@@ -1,9 +1,10 @@
-import React from "react";
+import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
+import { motion, AnimatePresence } from "framer-motion";
 import { Bell, Menu, Moon, Sun, LogOut, User, Settings } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { useThemeStore } from "../../stores/themeStore";
+import { notificationAPI } from "../../services/api";
 import { Button } from "../ui/button";
 import {
   DropdownMenu,
@@ -13,13 +14,34 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "../ui/dropdown-menu";
+import { Sheet, SheetContent, SheetTrigger } from "../ui/sheet";
 import { Avatar, AvatarFallback } from "../ui/avatar";
 import { Badge } from "../ui/badge";
+import { NotificationPanel } from "../notifications/NotificationPanel";
 
 export const Header = ({ onMenuClick }) => {
   const { user, logout } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
   const navigate = useNavigate();
+  const [notificationOpen, setNotificationOpen] = useState(false);
+  const [unreadCount, setUnreadCount] = useState(0);
+
+  useEffect(() => {
+    fetchUnreadCount();
+    // Poll for new notifications every 30 seconds
+    const interval = setInterval(fetchUnreadCount, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const fetchUnreadCount = async () => {
+    try {
+      const response = await notificationAPI.unreadCount();
+      setUnreadCount(response.data.unread_count || 0);
+    } catch (error) {
+      // If endpoint doesn't exist yet, show 1 as placeholder
+      setUnreadCount(1);
+    }
+  };
 
   const handleLogout = () => {
     logout();
@@ -34,6 +56,12 @@ export const Header = ({ onMenuClick }) => {
       .join("")
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const getDisplayName = () => {
+    if (user?.name) return user.name;
+    if (user?.email) return user.email.split("@")[0];
+    return "User";
   };
 
   return (
@@ -84,25 +112,42 @@ export const Header = ({ onMenuClick }) => {
             )}
           </Button>
 
-          <Button variant="ghost" size="icon" className="relative">
-            <Bell className="h-5 w-5" />
-            <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive" />
-          </Button>
+          <Sheet open={notificationOpen} onOpenChange={setNotificationOpen}>
+            <SheetTrigger asChild>
+              <Button variant="ghost" size="icon" className="relative">
+                <Bell className="h-5 w-5" />
+                {unreadCount > 0 && (
+                  <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-destructive animate-pulse" />
+                )}
+                {unreadCount > 0 && (
+                  <Badge
+                    variant="destructive"
+                    className="absolute -top-1 -right-1 h-5 w-5 flex items-center justify-center p-0 text-xs"
+                  >
+                    {unreadCount > 9 ? "9+" : unreadCount}
+                  </Badge>
+                )}
+              </Button>
+            </SheetTrigger>
+            <SheetContent side="right" className="p-0 w-auto">
+              <NotificationPanel onClose={() => setNotificationOpen(false)} />
+            </SheetContent>
+          </Sheet>
 
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" className="relative h-10 px-2 gap-2">
                 <Avatar className="h-8 w-8 border-2 border-primary/50">
                   <AvatarFallback className="bg-primary/10 text-primary">
-                    {getInitials(user?.email)}
+                    {getInitials(user?.name || user?.email)}
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-medium">
-                    {user?.email?.split("@")[0]}
+                  <span className="text-sm font-medium truncate max-w-[120px]">
+                    {getDisplayName()}
                   </span>
                   <Badge variant="outline" className="text-xs h-5">
-                    {user?.role}
+                    {user?.role?.replace("_", " ")}
                   </Badge>
                 </div>
               </Button>
@@ -110,8 +155,11 @@ export const Header = ({ onMenuClick }) => {
             <DropdownMenuContent align="end" className="w-56 glass-card">
               <DropdownMenuLabel>
                 <div className="flex flex-col space-y-1">
-                  <p className="text-sm font-medium">{user?.email}</p>
-                  <p className="text-xs text-muted-foreground">{user?.role}</p>
+                  <p className="text-sm font-medium">{getDisplayName()}</p>
+                  <p className="text-xs text-muted-foreground">{user?.email}</p>
+                  <Badge variant="outline" className="text-xs w-fit mt-1">
+                    {user?.role?.replace("_", " ")}
+                  </Badge>
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />

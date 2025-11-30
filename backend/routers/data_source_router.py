@@ -7,7 +7,8 @@ from typing import List, Optional
 from pydantic import BaseModel
 from datetime import datetime
 
-from backend.database import get_db
+from backend.database import get_db, User
+from backend.routers.auth_router import get_current_user
 from Agent.data_ingestion.models import ExternalDataSource, SyncLog
 from Agent.data_ingestion.db_connector import ExternalDBConnector
 from Agent.data_ingestion.sync_service import SyncService
@@ -74,11 +75,18 @@ class ConnectionTest(BaseModel):
 @router.post("/create")
 async def create_data_source(
     source: DataSourceCreate,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Register a new external data source
+    
+    - Only developers can create data sources
     """
+    # Check permissions
+    if current_user.role != "developer":
+        raise HTTPException(status_code=403, detail="Developer access only")
+   
     try:
         # Check if name already exists
         existing = db.query(ExternalDataSource).filter(
@@ -142,11 +150,17 @@ async def create_data_source(
 @router.get("/list")
 async def list_data_sources(
     ministry_name: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     List all registered data sources
+    
+    - Only developers can view data sources
     """
+    # Check permissions
+    if current_user.role != "developer":
+        raise HTTPException(status_code=403, detail="Developer access only")
     query = db.query(ExternalDataSource)
     
     if ministry_name:
@@ -179,11 +193,17 @@ async def list_data_sources(
 @router.get("/{source_id}")
 async def get_data_source(
     source_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Get details of a specific data source
+    
+    - Only developers can view data sources
     """
+    # Check permissions
+    if current_user.role != "developer":
+        raise HTTPException(status_code=403, detail="Developer access only")
     source = db.query(ExternalDataSource).filter(
         ExternalDataSource.id == source_id
     ).first()
@@ -259,11 +279,17 @@ async def update_data_source(
 @router.delete("/{source_id}")
 async def delete_data_source(
     source_id: int,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Delete a data source
+    
+    - Only developers can delete data sources
     """
+    # Check permissions
+    if current_user.role != "developer":
+        raise HTTPException(status_code=403, detail="Developer access only")
     source = db.query(ExternalDataSource).filter(
         ExternalDataSource.id == source_id
     ).first()
@@ -351,11 +377,17 @@ async def trigger_sync(
 @router.post("/sync-all")
 async def sync_all_sources(
     background_tasks: BackgroundTasks,
+    current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Trigger sync for all enabled data sources
+    
+    - Only developers can trigger syncs
     """
+    # Check permissions
+    if current_user.role != "developer":
+        raise HTTPException(status_code=403, detail="Developer access only")
     def run_sync_all():
         from backend.database import SessionLocal
         bg_db = SessionLocal()

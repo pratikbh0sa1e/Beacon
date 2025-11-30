@@ -91,11 +91,20 @@ async def list_users(
     # Build query
     query = db.query(User)
     
-    # Apply institution filter for university admin
-    if current_user.role == "university_admin":
-        query = query.filter(User.institution_id == current_user.institution_id)
+    # Hide developers from non-developers
+    if current_user.role != "developer":
+        query = query.filter(User.role != "developer")
     
-    # Apply filters
+    # Apply hierarchy-based filtering
+    if current_user.role == "moe_admin":
+        # MoE admins see university admins, doc officers, and students
+        query = query.filter(User.role.in_(["university_admin", "document_officer", "student"]))
+    elif current_user.role == "university_admin":
+        # University admins see only users in their institution
+        query = query.filter(User.institution_id == current_user.institution_id)
+        query = query.filter(User.role.in_(["document_officer", "student"]))
+    
+    # Apply additional filters
     if role:
         query = query.filter(User.role == role)
     if approved is not None:
@@ -149,6 +158,19 @@ async def approve_user(
             raise HTTPException(
                 status_code=400, 
                 detail=f"Limit reached: You cannot have more than {MAX_MOE_ADMINS} Active Ministry Admins."
+            )
+        
+    if target_user.role == "university_admin":
+        existing_admin = db.query(User).filter(
+            User.role == "university_admin",
+            User.institution_id == target_user.institution_id,
+            User.approved == True # Checks for ACTIVE admins
+        ).first()
+        
+        if existing_admin:
+            raise HTTPException(
+                status_code=400,
+                detail=f"This institution already has an active Admin ({existing_admin.name}). Only one is allowed."
             )
     
     # Approve user
@@ -273,6 +295,113 @@ async def change_user_role(
             "email": target_user.email,
             "role": target_user.role
         }
+    }
+
+
+@router.post("/revoke/{user_id}")
+async def revoke_user_approval(
+    user_id: int,
+    request: ApprovalRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Revoke approval for a user (set approved=False)
+    """
+    # Find target user
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Cannot revoke yourself
+    if target_user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot revoke your own approval")
+    
+    # Cannot revoke developers
+    if target_user.role == "developer":
+        raise HTTPException(status_code=403, detail="Cannot revoke developer accounts")
+    
+    # Check if already not approved
+    if not target_user.approved:
+        raise HTTPException(status_code=400, detail="User is not approved")
+    
+    # Check permissions
+    if not check_admin_permission(current_user, target_user):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to revoke this user"
+        )
+    
+    # Revoke approval
+    target_user.approved = False
+    db.commit()
+    
+    # Log audit
+    log_audit(db, current_user.id, "user_approval_revoked", {
+        "target_user_id": user_id,
+        "target_email": target_user.email,
+        "target_role": target_user.role,
+        "notes": request.notes
+    })
+    
+    return {
+        "status": "success",
+        "message": f"Approval revoked for {target_user.email}",
+        "user": {
+            "id": target_user.id,
+            "name": target_user.name,
+            "email": target_user.email,
+            "role": target_user.role,
+            "approved": target_user.approved
+        }
+    }
+
+
+@router.delete("/delete/{user_id}")
+async def delete_user(
+    user_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Delete a user account permanently
+    """
+    # Find target user
+    target_user = db.query(User).filter(User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    # Cannot delete yourself
+    if target_user.id == current_user.id:
+        raise HTTPException(status_code=400, detail="Cannot delete your own account")
+    
+    # Cannot delete developers
+    if target_user.role == "developer":
+        raise HTTPException(status_code=403, detail="Cannot delete developer accounts")
+    
+    # Check permissions
+    if not check_admin_permission(current_user, target_user):
+        raise HTTPException(
+            status_code=403,
+            detail="You don't have permission to delete this user"
+        )
+    
+    # Log audit before deletion
+    log_audit(db, current_user.id, "user_deleted", {
+        "target_user_id": user_id,
+        "target_email": target_user.email,
+        "target_role": target_user.role,
+        "was_approved": target_user.approved
+    })
+    
+    # Delete user
+    user_email = target_user.email
+    db.delete(target_user)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": f"User {user_email} has been permanently deleted"
     }
 
 

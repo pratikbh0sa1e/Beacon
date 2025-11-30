@@ -98,6 +98,130 @@ async def get_pending_documents(
     return {"pending_documents": result}
 
 
+@router.get("/documents/approved")
+async def get_approved_documents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get documents that have been approved based on user's role
+    
+    - Developer sees all approved documents
+    - MoE Admin sees restricted and public approved documents
+    - University Admin sees institution-only and public approved documents from their institution
+    """
+    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    
+    # Base query for approved documents
+    query = db.query(Document).filter(Document.approval_status == "approved")
+    
+    # Filter based on role (same logic as pending)
+    if current_user.role == "developer":
+        # Developers see all approved documents
+        pass
+    elif current_user.role == "moe_admin":
+        # MoE admins see restricted and public documents
+        query = query.filter(Document.visibility_level.in_(["restricted", "public"]))
+    elif current_user.role == "university_admin":
+        # University admins see their institution's documents
+        query = query.filter(
+            Document.institution_id == current_user.institution_id,
+            Document.visibility_level.in_(["institution_only", "public"])
+        )
+    
+    documents = query.order_by(Document.approved_at.desc()).all()
+    
+    # Format response with uploader and approver info
+    result = []
+    for doc in documents:
+        uploader = db.query(User).filter(User.id == doc.uploader_id).first()
+        approver = db.query(User).filter(User.id == doc.approved_by).first()
+        result.append({
+            "id": doc.id,
+            "filename": doc.filename,
+            "file_type": doc.file_type,
+            "visibility_level": doc.visibility_level,
+            "uploaded_at": doc.uploaded_at,
+            "approved_at": doc.approved_at,
+            "uploader": {
+                "id": uploader.id if uploader else None,
+                "name": uploader.name if uploader else "Unknown",
+                "email": uploader.email if uploader else "Unknown"
+            },
+            "approver": {
+                "id": approver.id if approver else None,
+                "name": approver.name if approver else "Unknown",
+                "role": approver.role if approver else "Unknown"
+            },
+            "institution_id": doc.institution_id
+        })
+    
+    return {"approved_documents": result}
+
+
+@router.get("/documents/rejected")
+async def get_rejected_documents(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get documents that have been rejected based on user's role
+    
+    - Developer sees all rejected documents
+    - MoE Admin sees restricted and public rejected documents
+    - University Admin sees institution-only and public rejected documents from their institution
+    """
+    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+        raise HTTPException(status_code=403, detail="Insufficient permissions")
+    
+    # Base query for rejected documents
+    query = db.query(Document).filter(Document.approval_status == "rejected")
+    
+    # Filter based on role (same logic as pending)
+    if current_user.role == "developer":
+        # Developers see all rejected documents
+        pass
+    elif current_user.role == "moe_admin":
+        # MoE admins see restricted and public documents
+        query = query.filter(Document.visibility_level.in_(["restricted", "public"]))
+    elif current_user.role == "university_admin":
+        # University admins see their institution's documents
+        query = query.filter(
+            Document.institution_id == current_user.institution_id,
+            Document.visibility_level.in_(["institution_only", "public"])
+        )
+    
+    documents = query.order_by(Document.approved_at.desc()).all()
+    
+    # Format response with uploader and rejector info
+    result = []
+    for doc in documents:
+        uploader = db.query(User).filter(User.id == doc.uploader_id).first()
+        rejector = db.query(User).filter(User.id == doc.approved_by).first()
+        result.append({
+            "id": doc.id,
+            "filename": doc.filename,
+            "file_type": doc.file_type,
+            "visibility_level": doc.visibility_level,
+            "uploaded_at": doc.uploaded_at,
+            "rejected_at": doc.approved_at,  # approved_at stores rejection time too
+            "uploader": {
+                "id": uploader.id if uploader else None,
+                "name": uploader.name if uploader else "Unknown",
+                "email": uploader.email if uploader else "Unknown"
+            },
+            "rejector": {
+                "id": rejector.id if rejector else None,
+                "name": rejector.name if rejector else "Unknown",
+                "role": rejector.role if rejector else "Unknown"
+            },
+            "institution_id": doc.institution_id
+        })
+    
+    return {"rejected_documents": result}
+
+
 @router.post("/documents/approve/{document_id}")
 async def approve_document(
     document_id: int,

@@ -137,7 +137,7 @@ export const DashboardPage = () => {
               icon={Clock}
               trend="Approvals"
               color="warning"
-              onClick={() => handleNavigate("/admin/approvals")}
+              onClick={() => handleNavigate("/admin/users")}
             />
           </>
         )}

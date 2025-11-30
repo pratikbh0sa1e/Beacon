@@ -60,6 +60,9 @@ export const userAPI = {
   approveUser: (userId, notes) =>
     api.post(`/users/approve/${userId}`, { notes }),
   rejectUser: (userId, notes) => api.post(`/users/reject/${userId}`, { notes }),
+  revokeApproval: (userId, notes) =>
+    api.post(`/users/revoke/${userId}`, { notes }),
+  deleteUser: (userId) => api.delete(`/users/delete/${userId}`),
   changeRole: (userId, newRole, notes) =>
     api.patch(`/users/change-role/${userId}`, { new_role: newRole, notes }),
 };
@@ -95,12 +98,31 @@ export const documentAPI = {
 // ============ APPROVAL ENDPOINTS ============
 export const approvalAPI = {
   getPendingDocuments: () => api.get("/approvals/documents/pending"),
+  getApprovedDocuments: () => api.get("/approvals/documents/approved"),
+  getRejectedDocuments: () => api.get("/approvals/documents/rejected"),
   approveDocument: (docId, notes) =>
     api.post(`/approvals/documents/approve/${docId}`, { notes }),
   rejectDocument: (docId, notes) =>
     api.post(`/approvals/documents/reject/${docId}`, { notes }),
   getDocumentHistory: (docId) =>
     api.get(`/approvals/documents/history/${docId}`),
+};
+
+// ============ BOOKMARK ENDPOINTS (NEW) ============
+export const bookmarkAPI = {
+  toggle: (docId) => api.post(`/bookmark/toggle/${docId}`),
+  list: () => api.get("/bookmark/list"),
+};
+
+// ============ NOTIFICATION ENDPOINTS ============
+export const notificationAPI = {
+  list: (params) => api.get("/notifications/list", { params }),
+  grouped: () => api.get("/notifications/grouped"),
+  unreadCount: () => api.get("/notifications/unread-count"),
+  markRead: (id) => api.post(`/notifications/${id}/mark-read`),
+  markAllRead: () => api.post("/notifications/mark-all-read"),
+  delete: (id) => api.delete(`/notifications/${id}`),
+  clearAll: () => api.delete("/notifications/clear-all"),
 };
 
 // ============ AUDIT ENDPOINTS ============
