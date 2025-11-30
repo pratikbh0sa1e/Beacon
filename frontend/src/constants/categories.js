@@ -1,5 +1,6 @@
 // Document categories
 export const DOCUMENT_CATEGORIES = [
+  "Uncategorized",
   "Circular",
   "Notice",
   "Act",
@@ -28,6 +29,7 @@ export const getVisibilityLabel = (value) => {
 
 // Departments
 export const DEPARTMENTS = [
+  "General",
   "Administration",
   "Academic Affairs",
   "Student Services",

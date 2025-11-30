@@ -1,22 +1,63 @@
-import React from 'react';
-import { Link, useLocation } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
-import { Home, FileText, Upload, MessageSquare, Users, Building2, BarChart3, Shield, Settings, X } from 'lucide-react';
-import { useAuthStore } from '../../stores/authStore';
-import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from '../../constants/roles';
-import { Button } from '../ui/button';
-import { cn } from '../../lib/utils';
+import React from "react";
+import { Link, useLocation } from "react-router-dom";
+import { motion, AnimatePresence } from "framer-motion";
+import {
+  Home,
+  FileText,
+  Upload,
+  MessageSquare,
+  Users,
+  Building2,
+  BarChart3,
+  Shield,
+  Settings,
+  X,
+} from "lucide-react";
+import { useAuthStore } from "../../stores/authStore";
+import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
+import { Button } from "../ui/button";
+import { cn } from "../../lib/utils";
 
 const menuItems = [
-  { icon: Home, label: 'Dashboard', path: '/', roles: [] },
-  { icon: FileText, label: 'Documents', path: '/documents', roles: [] },
-  { icon: Upload, label: 'Upload', path: '/upload', roles: DOCUMENT_MANAGER_ROLES },
-  { icon: MessageSquare, label: 'AI Assistant', path: '/ai-chat', roles: [] },
-  { icon: Users, label: 'User Management', path: '/admin/users', roles: ADMIN_ROLES },
-  { icon: Shield, label: 'Approvals', path: '/admin/approvals', roles: ADMIN_ROLES },
-  { icon: Building2, label: 'Institutions', path: '/admin/institutions', roles: ADMIN_ROLES },
-  { icon: BarChart3, label: 'Analytics', path: '/admin/analytics', roles: ADMIN_ROLES },
-  { icon: Settings, label: 'System Health', path: '/admin/system', roles: ADMIN_ROLES },
+  { icon: Home, label: "Dashboard", path: "/", roles: [] },
+  { icon: FileText, label: "Documents", path: "/documents", roles: [] },
+  {
+    icon: Upload,
+    label: "Upload",
+    path: "/upload",
+    roles: DOCUMENT_MANAGER_ROLES,
+  },
+  { icon: MessageSquare, label: "AI Assistant", path: "/ai-chat", roles: [] },
+  {
+    icon: Users,
+    label: "User Management",
+    path: "/admin/users",
+    roles: ADMIN_ROLES,
+  },
+  {
+    icon: Shield,
+    label: "Approvals",
+    path: "/admin/approvals",
+    roles: ADMIN_ROLES,
+  },
+  {
+    icon: Building2,
+    label: "Institutions",
+    path: "/admin/institutions",
+    roles: ADMIN_ROLES,
+  },
+  {
+    icon: BarChart3,
+    label: "Analytics",
+    path: "/admin/analytics",
+    roles: ADMIN_ROLES,
+  },
+  {
+    icon: Settings,
+    label: "System Health",
+    path: "/admin/system",
+    roles: ADMIN_ROLES,
+  },
 ];
 
 export const Sidebar = ({ isOpen, onClose }) => {
@@ -47,8 +88,8 @@ export const Sidebar = ({ isOpen, onClose }) => {
           x: isOpen ? 0 : -280,
         }}
         className={cn(
-          'fixed top-16 left-0 z-40 h-[calc(100vh-4rem)] w-64 border-r border-border/40 glass-card',
-          'lg:translate-x-0 lg:static lg:h-auto'
+          "fixed top-16 left-0 z-40 h-[calc(100vh-4rem)] w-64 border-r border-border/40 glass-card shadow-xl"
+          // 'lg:!translate-x-0 lg:static lg:h-auto'
         )}
       >
         <div className="flex h-full flex-col">
@@ -65,15 +106,20 @@ export const Sidebar = ({ isOpen, onClose }) => {
               const isActive = location.pathname === item.path;
 
               return (
-                <Link key={item.path} to={item.path} onClick={() => onClose()}>
+                // <Link key={item.path} to={item.path} onClick={() => onClose()}>
+                <Link
+                  key={item.path}
+                  to={item.path}
+                  onClick={() => window.innerWidth < 1024 && onClose()}
+                >
                   <motion.div
                     whileHover={{ x: 4 }}
                     whileTap={{ scale: 0.98 }}
                     className={cn(
-                      'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                      "flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors",
                       isActive
-                        ? 'bg-primary/10 text-primary border border-primary/20 neon-glow'
-                        : 'text-muted-foreground hover:bg-secondary hover:text-foreground'
+                        ? "bg-primary/10 text-primary border border-primary/20 neon-glow"
+                        : "text-muted-foreground hover:bg-secondary hover:text-foreground"
                     )}
                   >
                     <Icon className="h-5 w-5" />

@@ -156,18 +156,26 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
     # Find user
     user = db.query(User).filter(User.email == request.email).first()
     if not user:
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        # ✅ Change: Return 404 with a specific message
+        raise HTTPException(
+            status_code=404, 
+            detail="User not registered. Please sign up first."
+        )
     
     # Verify password
     if not verify_password(request.password, user.password_hash):
-        raise HTTPException(status_code=401, detail="Invalid email or password")
+        # ✅ Change: Specific message for password
+        raise HTTPException(
+            status_code=401, 
+            detail="Incorrect password. Please try again."
+        )
     
     # Check if approved
-    if not user.approved:
-        raise HTTPException(
-            status_code=403,
-            detail="Your account is pending approval. Please wait for an admin to approve your registration."
-        )
+    # if not user.approved:
+    #     raise HTTPException(
+    #         status_code=403,
+    #         detail="Your account is pending approval. Please wait for an admin to approve your registration."
+    #     )
     
     # Create access token
     access_token = create_access_token(

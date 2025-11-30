@@ -109,7 +109,8 @@ class Document(Base):
     approved_at = Column(DateTime, nullable=True)
     
     uploaded_at = Column(DateTime, default=datetime.utcnow)
-    
+    user_description = Column(Text, nullable=True)
+    version = Column(String(50), default="1.0")
     # ✅ FIXED: Renamed from 'metadata' to 'additional_metadata' to avoid SQLAlchemy conflict
     additional_metadata = Column(Text, nullable=True)
     

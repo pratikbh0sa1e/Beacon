@@ -1,13 +1,20 @@
-import React from 'react';
-import { Link, useNavigate } from 'react-router-dom';
-import { motion } from 'framer-motion';
-import { Bell, Menu, Moon, Sun, LogOut, User, Settings } from 'lucide-react';
-import { useAuthStore } from '../../stores/authStore';
-import { useThemeStore } from '../../stores/themeStore';
-import { Button } from '../ui/button';
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '../ui/dropdown-menu';
-import { Avatar, AvatarFallback } from '../ui/avatar';
-import { Badge } from '../ui/badge';
+import React from "react";
+import { Link, useNavigate } from "react-router-dom";
+import { motion } from "framer-motion";
+import { Bell, Menu, Moon, Sun, LogOut, User, Settings } from "lucide-react";
+import { useAuthStore } from "../../stores/authStore";
+import { useThemeStore } from "../../stores/themeStore";
+import { Button } from "../ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "../ui/dropdown-menu";
+import { Avatar, AvatarFallback } from "../ui/avatar";
+import { Badge } from "../ui/badge";
 
 export const Header = ({ onMenuClick }) => {
   const { user, logout } = useAuthStore();
@@ -16,12 +23,17 @@ export const Header = ({ onMenuClick }) => {
 
   const handleLogout = () => {
     logout();
-    navigate('/login');
+    navigate("/login");
   };
 
   const getInitials = (name) => {
-    if (!name) return 'U';
-    return name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2);
+    if (!name) return "U";
+    return name
+      .split(" ")
+      .map((n) => n[0])
+      .join("")
+      .toUpperCase()
+      .slice(0, 2);
   };
 
   return (
@@ -30,12 +42,13 @@ export const Header = ({ onMenuClick }) => {
       animate={{ y: 0 }}
       className="sticky top-0 z-50 w-full border-b border-border/40 glass-card"
     >
-      <div className="container flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
+      {/* <div className="container flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8"> */}
+      <div className="w-full flex h-16 items-center justify-between px-4 sm:px-6 lg:px-8">
         <div className="flex items-center gap-4">
           <Button
             variant="ghost"
             size="icon"
-            className="lg:hidden"
+            // className="lg:hidden"
             onClick={onMenuClick}
           >
             <Menu className="h-5 w-5" />
@@ -43,12 +56,16 @@ export const Header = ({ onMenuClick }) => {
           <Link to="/" className="flex items-center space-x-3">
             <div className="relative">
               <div className="h-9 w-9 rounded-lg bg-gradient-to-br from-primary to-accent flex items-center justify-center neon-glow">
-                <span className="text-lg font-bold text-primary-foreground">B</span>
+                <span className="text-lg font-bold text-primary-foreground">
+                  B
+                </span>
               </div>
             </div>
             <div className="hidden sm:block">
               <h1 className="text-xl font-bold gradient-text">BEACON</h1>
-              <p className="text-xs text-muted-foreground">Document Intelligence</p>
+              <p className="text-xs text-muted-foreground">
+                Document Intelligence
+              </p>
             </div>
           </Link>
         </div>
@@ -60,7 +77,11 @@ export const Header = ({ onMenuClick }) => {
             onClick={toggleTheme}
             className="relative"
           >
-            {theme === 'dark' ? <Sun className="h-5 w-5" /> : <Moon className="h-5 w-5" />}
+            {theme === "dark" ? (
+              <Sun className="h-5 w-5" />
+            ) : (
+              <Moon className="h-5 w-5" />
+            )}
           </Button>
 
           <Button variant="ghost" size="icon" className="relative">
@@ -77,8 +98,12 @@ export const Header = ({ onMenuClick }) => {
                   </AvatarFallback>
                 </Avatar>
                 <div className="hidden md:flex flex-col items-start">
-                  <span className="text-sm font-medium">{user?.email?.split('@')[0]}</span>
-                  <Badge variant="outline" className="text-xs h-5">{user?.role}</Badge>
+                  <span className="text-sm font-medium">
+                    {user?.email?.split("@")[0]}
+                  </span>
+                  <Badge variant="outline" className="text-xs h-5">
+                    {user?.role}
+                  </Badge>
                 </div>
               </Button>
             </DropdownMenuTrigger>
@@ -90,16 +115,19 @@ export const Header = ({ onMenuClick }) => {
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={() => navigate('/profile')}>
+              <DropdownMenuItem onClick={() => navigate("/profile")}>
                 <User className="mr-2 h-4 w-4" />
                 <span>Profile</span>
               </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate('/settings')}>
+              <DropdownMenuItem onClick={() => navigate("/settings")}>
                 <Settings className="mr-2 h-4 w-4" />
                 <span>Settings</span>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem onClick={handleLogout} className="text-destructive">
+              <DropdownMenuItem
+                onClick={handleLogout}
+                className="text-destructive"
+              >
                 <LogOut className="mr-2 h-4 w-4" />
                 <span>Log out</span>
               </DropdownMenuItem>

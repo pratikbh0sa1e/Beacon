@@ -20,7 +20,7 @@ import { Card, CardContent } from "../components/ui/card";
 import { Button } from "../components/ui/button";
 import { Badge } from "../components/ui/badge";
 import { formatRelativeTime } from "../utils/dateFormat";
-import { ADMIN_ROLES } from "../constants/roles";
+import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../constants/roles";
 
 // ✅ FIXED: Added onClick handler to StatCard
 const StatCard = ({
@@ -101,7 +101,7 @@ export const DashboardPage = () => {
   const handleNavigate = (route) => {
     navigate(route);
   };
-
+  const isAdmin = ADMIN_ROLES.includes(user?.role);
   return (
     <div className="space-y-8">
       <PageHeader
@@ -109,7 +109,11 @@ export const DashboardPage = () => {
         description="Here's what's happening with your document system today."
       />
 
-      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
+      <div
+        className={`grid gap-6 md:grid-cols-2 ${
+          isAdmin ? "lg:grid-cols-4" : "lg:grid-cols-2"
+        }`}
+      >
         <StatCard
           title="Total Documents"
           value={stats.documents}
@@ -186,13 +190,23 @@ export const DashboardPage = () => {
           <CardContent className="p-6">
             <h3 className="text-lg font-semibold mb-4">Quick Actions</h3>
             <div className="space-y-3">
-              <Button
+              {/* <Button
                 className="w-full justify-start neon-glow"
                 onClick={() => navigate("/upload")}
               >
                 <Upload className="h-4 w-4 mr-2" />
                 Upload New Document
-              </Button>
+              </Button> */}
+              {/* ✅ FIX: Only show Upload button if user has permission */}
+              {DOCUMENT_MANAGER_ROLES.includes(user?.role) && (
+                <Button
+                  className="w-full justify-start neon-glow"
+                  onClick={() => navigate("/upload")}
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Upload New Document
+                </Button>
+              )}
               <Button
                 variant="outline"
                 className="w-full justify-start"

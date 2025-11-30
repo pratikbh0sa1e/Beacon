@@ -44,6 +44,10 @@ export const LoginPage = () => {
       }
     } catch (error) {
       console.error("Login error:", error);
+      if (error.response && error.response.status === 403) {
+        navigate("/pending-approval");
+        return;
+      }
       toast.error(
         error.response?.data?.detail ||
           "Login failed. Please check your credentials."

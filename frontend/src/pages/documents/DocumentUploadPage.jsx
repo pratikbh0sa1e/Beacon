@@ -16,6 +16,7 @@ import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
 import { Textarea } from "../../components/ui/textarea";
+import { Switch } from "../../components/ui/switch";
 import {
   Select,
   SelectContent,
@@ -31,14 +32,16 @@ import {
   DEPARTMENTS,
 } from "../../constants/categories";
 import { toast } from "sonner";
+import { useAuthStore } from "../../stores/authStore"; // ✅ Import Auth Store
+import { ROLES } from "../../constants/roles";
 
 export const DocumentUploadPage = () => {
+  const { user } = useAuthStore();
   const navigate = useNavigate();
   const [fileList, setFileList] = useState([]);
   const [institutions, setInstitutions] = useState([]);
   const [isUploading, setIsUploading] = useState(false);
 
-  
   useEffect(() => {
     const fetchInstitutions = async () => {
       try {
@@ -48,7 +51,7 @@ export const DocumentUploadPage = () => {
         console.error("Error fetching institutions:", error);
       }
     };
-    
+
     fetchInstitutions();
   }, []);
   // --- File Handling ---
@@ -65,12 +68,15 @@ export const DocumentUploadPage = () => {
       status: "pending", // pending, uploading, success, error
       progress: 0,
       meta: {
-        title: "", // Leave blank to let AI decide
+        title: "",
         category: "Uncategorized",
         description: "",
         department: "General",
-        visibility: "public", // Default visibility
+        visibility: "public",
         institution: "",
+        downloadAllowed: false, // ✅ Default download setting
+        year: new Date().getFullYear().toString(),
+        version: "1.0",
       },
     }));
 
@@ -119,8 +125,13 @@ export const DocumentUploadPage = () => {
     if (meta.category) formData.append("category", meta.category);
     if (meta.department) formData.append("department", meta.department);
     if (meta.description) formData.append("description", meta.description);
-    if (meta.visibility) formData.append("visibility", meta.visibility);
     if (meta.institution) formData.append("institution", meta.institution);
+    if (meta.year) formData.append("year", meta.year);
+    if (meta.version) formData.append("version", meta.version);
+
+    // Required / Default fields
+    formData.append("visibility", meta.visibility || "public");
+    formData.append("download_allowed", meta.downloadAllowed);
 
     try {
       // Fake progress interval for UX (Axios upload progress is tricky to hook into per-item here easily)
@@ -190,7 +201,6 @@ export const DocumentUploadPage = () => {
         icon={Upload}
       />
 
-      {/* Drag & Drop Area */}
       <Card className="glass-card border-border/50 border-dashed border-2 hover:border-primary/50 transition-colors">
         <CardContent
           className="p-10 flex flex-col items-center justify-center cursor-pointer min-h-[200px]"
@@ -218,7 +228,6 @@ export const DocumentUploadPage = () => {
         </CardContent>
       </Card>
 
-      {/* File List */}
       <div className="space-y-4">
         <AnimatePresence>
           {fileList.map((item, index) => (
@@ -228,12 +237,12 @@ export const DocumentUploadPage = () => {
               onRemove={() => removeFile(item.id)}
               onUpdate={updateFileMeta}
               institutions={institutions}
+              userRole={user?.role}
             />
           ))}
         </AnimatePresence>
       </div>
 
-      {/* Footer Actions */}
       {fileList.length > 0 && (
         <div className="fixed bottom-0 left-0 right-0 p-4 bg-background/80 backdrop-blur-lg border-t z-50">
           <div className="container max-w-4xl mx-auto flex items-center justify-between gap-4">
@@ -265,17 +274,19 @@ export const DocumentUploadPage = () => {
 };
 
 // --- Helper Component: Individual File Form ---
-const FileFormItem = ({ item, onRemove, onUpdate, institutions }) => {
+const FileFormItem = ({ item, onRemove, onUpdate, institutions, userRole }) => {
   const [isOpen, setIsOpen] = useState(true);
 
-  // Status Colors
   const borderColor =
     item.status === "error"
       ? "border-destructive/50"
       : item.status === "success"
       ? "border-success/50"
       : "border-border/50";
-
+  // ✅ Helper: Check if user is Super Admin
+  const canSelectInstitution = [ROLES.DEVELOPER, ROLES.MOE_ADMIN].includes(
+    userRole
+  );
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -285,7 +296,6 @@ const FileFormItem = ({ item, onRemove, onUpdate, institutions }) => {
       <Card
         className={`glass-card overflow-hidden transition-all duration-300 ${borderColor}`}
       >
-        {/* Header Bar */}
         <div className="p-4 flex items-center gap-4 bg-secondary/20 select-none">
           <div className="h-10 w-10 rounded-lg bg-background flex items-center justify-center shrink-0">
             <FileText className="h-5 w-5 text-primary" />
@@ -342,7 +352,6 @@ const FileFormItem = ({ item, onRemove, onUpdate, institutions }) => {
           </div>
         </div>
 
-        {/* Collapsible Form */}
         <AnimatePresence>
           {isOpen && (
             <motion.div
@@ -394,7 +403,8 @@ const FileFormItem = ({ item, onRemove, onUpdate, institutions }) => {
                   />
                 </div>
 
-                <div className="grid gap-4 md:grid-cols-2">
+                {/* ✅ UPDATED: Grid with 3 columns for Dept, Visibility, Download */}
+                <div className="grid gap-4 md:grid-cols-3 items-end">
                   <div className="space-y-2">
                     <Label>Department</Label>
                     <Select
@@ -413,6 +423,7 @@ const FileFormItem = ({ item, onRemove, onUpdate, institutions }) => {
                       </SelectContent>
                     </Select>
                   </div>
+
                   <div className="space-y-2">
                     <Label>Visibility</Label>
                     <Select
@@ -431,7 +442,59 @@ const FileFormItem = ({ item, onRemove, onUpdate, institutions }) => {
                       </SelectContent>
                     </Select>
                   </div>
+
+                  {/* ✅ LOGIC: If Admin, show Institution Dropdown. If NOT, show Download Switch */}
+                  {canSelectInstitution ? (
+                    <div className="space-y-2">
+                      <Label>Institution</Label>
+                      <Select
+                        value={item.meta.institution}
+                        onValueChange={(v) =>
+                          onUpdate(item.id, "institution", v)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select (Optional)" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {institutions.map((inst) => (
+                            <SelectItem key={inst.id} value={String(inst.id)}>
+                              {inst.name}
+                            </SelectItem>
+                          ))}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  ) : (
+                    // Regular users see the Download Switch here to fill the grid space
+                    <div className="flex items-center justify-between border rounded-md px-3 h-10 bg-secondary/10">
+                      <Label className="cursor-pointer text-sm font-medium mr-2">
+                        Allow Download
+                      </Label>
+                      <Switch
+                        checked={item.meta.downloadAllowed}
+                        onCheckedChange={(v) =>
+                          onUpdate(item.id, "downloadAllowed", v)
+                        }
+                      />
+                    </div>
+                  )}
                 </div>
+
+                {/* ✅ LOGIC: If Admin (who saw Inst dropdown above), show Download Switch in a new row */}
+                {canSelectInstitution && (
+                  <div className="flex items-center justify-between border rounded-md px-3 h-10 bg-secondary/10 mt-2 max-w-[33%]">
+                    <Label className="cursor-pointer text-sm font-medium mr-2">
+                      Allow Download
+                    </Label>
+                    <Switch
+                      checked={item.meta.downloadAllowed}
+                      onCheckedChange={(v) =>
+                        onUpdate(item.id, "downloadAllowed", v)
+                      }
+                    />
+                  </div>
+                )}
               </CardContent>
             </motion.div>
           )}

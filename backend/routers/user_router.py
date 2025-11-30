@@ -137,6 +137,20 @@ async def approve_user(
             detail="You don't have permission to approve this user"
         )
     
+    # ✅ ADD THIS BLOCK: Limit Ministry Admins to 5
+    if target_user.role == "moe_admin":
+        MAX_MOE_ADMINS = 5
+        current_count = db.query(User).filter(
+            User.role == "moe_admin", 
+            User.approved == True
+        ).count()
+        
+        if current_count >= MAX_MOE_ADMINS:
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Limit reached: You cannot have more than {MAX_MOE_ADMINS} Active Ministry Admins."
+            )
+    
     # Approve user
     target_user.approved = True
     db.commit()
