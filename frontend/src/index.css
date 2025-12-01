@@ -9,32 +9,33 @@
 /* 3. YOUR CUSTOM STYLES */
 @layer base {
   :root {
-    --background: 230 35% 7%;
-    --foreground: 180 40% 95%;
-    --card: 230 30% 10%;
-    --card-foreground: 180 30% 92%;
-    --popover: 230 30% 12%;
-    --popover-foreground: 180 30% 92%;
-    --primary: 184 70% 59%;
-    --primary-foreground: 230 35% 7%;
+    /* Light theme (default) */
+    --background: 0 0% 100%;
+    --foreground: 222.2 84% 4.9%;
+    --card: 0 0% 100%;
+    --card-foreground: 222.2 84% 4.9%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 222.2 84% 4.9%;
+    --primary: 184 70% 45%;
+    --primary-foreground: 210 40% 98%;
     --primary-glow: 189 100% 51%;
-    --secondary: 230 40% 15%;
-    --secondary-foreground: 180 30% 92%;
-    --muted: 230 30% 20%;
-    --muted-foreground: 180 15% 60%;
+    --secondary: 210 40% 96.1%;
+    --secondary-foreground: 222.2 47.4% 11.2%;
+    --muted: 210 40% 96.1%;
+    --muted-foreground: 215.4 16.3% 46.9%;
     --accent: 189 100% 51%;
-    --accent-foreground: 230 35% 7%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
+    --accent-foreground: 222.2 47.4% 11.2%;
+    --destructive: 0 84.2% 60.2%;
+    --destructive-foreground: 210 40% 98%;
     --success: 142 70% 45%;
     --success-foreground: 0 0% 98%;
     --warning: 38 92% 50%;
     --warning-foreground: 0 0% 10%;
     --pending: 45 93% 47%;
     --pending-foreground: 0 0% 10%;
-    --border: 230 30% 18%;
-    --input: 230 30% 18%;
-    --ring: 184 70% 59%;
+    --border: 214.3 31.8% 91.4%;
+    --input: 214.3 31.8% 91.4%;
+    --ring: 184 70% 45%;
     --radius: 0.75rem;
     --gradient-primary: linear-gradient(
       135deg,
@@ -62,6 +63,51 @@
       0 0 60px hsl(189 100% 51% / 0.3);
     --transition-smooth: 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     --transition-fast: 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+  }
+
+  .dark {
+    /* Dark theme */
+    --background: 230 35% 7%;
+    --foreground: 180 40% 95%;
+    --card: 230 30% 10%;
+    --card-foreground: 180 30% 92%;
+    --popover: 230 30% 12%;
+    --popover-foreground: 180 30% 92%;
+    --primary: 184 70% 59%;
+    --primary-foreground: 230 35% 7%;
+    --primary-glow: 189 100% 51%;
+    --secondary: 230 40% 15%;
+    --secondary-foreground: 180 30% 92%;
+    --muted: 230 30% 20%;
+    --muted-foreground: 180 15% 60%;
+    --accent: 189 100% 51%;
+    --accent-foreground: 230 35% 7%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 70% 45%;
+    --success-foreground: 0 0% 98%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 10%;
+    --pending: 45 93% 47%;
+    --pending-foreground: 0 0% 10%;
+    --border: 230 30% 18%;
+    --input: 230 30% 18%;
+    --ring: 184 70% 59%;
+    --gradient-primary: linear-gradient(
+      135deg,
+      hsl(184 70% 59%),
+      hsl(189 100% 51%)
+    );
+    --gradient-subtle: linear-gradient(
+      180deg,
+      hsl(230 35% 7%),
+      hsl(230 40% 10%)
+    );
+    --gradient-glow: linear-gradient(
+      135deg,
+      hsl(184 70% 59% / 0.1),
+      hsl(189 100% 51% / 0.1)
+    );
   }
 }
 

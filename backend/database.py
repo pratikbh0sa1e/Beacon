@@ -5,6 +5,7 @@ from sqlalchemy.dialects.postgresql import JSONB
 from datetime import datetime
 import os
 from dotenv import load_dotenv
+from sqlalchemy import UniqueConstraint
 
 load_dotenv()
 
@@ -71,7 +72,8 @@ class User(Base):
     # Relationships
     institution = relationship("Institution", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")
-    
+    bookmarks = relationship("Bookmark", cascade="all, delete-orphan", back_populates="user")
+
     # ✅ FIXED: Specify foreign_keys to resolve ambiguity
     uploaded_documents = relationship(
         "Document",
@@ -121,7 +123,8 @@ class Document(Base):
         uselist=False,
         cascade="all, delete-orphan"
     )
-    
+    bookmarks = relationship("Bookmark", cascade="all, delete-orphan", back_populates="document")
+
     # ✅ FIXED: Specify foreign_keys in both relationships
     uploader = relationship(
         "User",
@@ -255,6 +258,61 @@ class AuditLog(Base):
     
     # Relationship
     user = relationship("User", back_populates="audit_logs")
+
+class Bookmark(Base):
+    """User document bookmarks"""
+    __tablename__ = "bookmarks"
+
+    id = Column(Integer, primary_key=True, index=True)
+
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False)
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint("user_id", "document_id", name="unique_user_document_bookmark"),
+    )
+
+    # Relationships
+    user = relationship("User", back_populates="bookmarks")
+    document = relationship("Document", back_populates="bookmarks")
+
+
+class Notification(Base):
+    """System notifications with hierarchical routing"""
+    __tablename__ = "notifications"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Recipient
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Notification content
+    title = Column(String(255), nullable=False)
+    message = Column(Text, nullable=False)
+    type = Column(String(50), nullable=False, index=True)
+    # Types: user_approval, document_approval, role_change, system_alert, upload_success, etc.
+    
+    # Priority levels
+    priority = Column(String(20), nullable=False, default="medium", index=True)
+    # Priorities: critical, high, medium, low
+    
+    # Status
+    read = Column(Boolean, default=False, nullable=False, index=True)
+    read_at = Column(DateTime, nullable=True)
+    
+    # Action metadata
+    action_url = Column(String(500), nullable=True)  # URL to navigate to
+    action_label = Column(String(100), nullable=True)  # CTA button text
+    action_metadata = Column(JSONB, nullable=True)  # Additional data
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    expires_at = Column(DateTime, nullable=True)  # Optional expiration
+    
+    # Relationship
+    user = relationship("User", foreign_keys=[user_id])
 
 
 def get_db():

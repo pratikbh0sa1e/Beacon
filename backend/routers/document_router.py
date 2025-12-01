@@ -499,16 +499,29 @@ async def upload_documents(
 async def list_documents(
     category: Optional[str] = None,
     search: Optional[str] = None,
+    sort_by: Optional[str] = "recent",
     limit: int = 100,
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user) # ✅ Security: Require Login
 ):
     """
-    List documents with Pagination, Search, and Role-Based Security.
+    List documents with Pagination, Search, Sorting, and Role-Based Security.
+    
+    Sort options:
+    - recent: Most recent first (default)
+    - oldest: Oldest first
+    - title-asc: Title A-Z
+    - title-desc: Title Z-A
+    - department: By department name
     """
-    query = db.query(Document, DocumentMetadata).outerjoin(
+    # query = db.query(Document, DocumentMetadata).outerjoin(
+    #     DocumentMetadata, Document.id == DocumentMetadata.document_id
+    # )
+    query = db.query(Document, DocumentMetadata, User).outerjoin(
         DocumentMetadata, Document.id == DocumentMetadata.document_id
+    ).outerjoin(
+        User, Document.uploader_id == User.id
     )
     
     # ==================================================================
@@ -564,6 +577,14 @@ async def list_documents(
         query = query.filter(or_(*visible_conditions))
 
     # ==================================================================
+    # ✅ APPROVAL STATUS FILTER
+    # ==================================================================
+    # Only show approved documents to regular users
+    # Admins and developers can see all statuses
+    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+        query = query.filter(Document.approval_status == "approved")
+    
+    # ==================================================================
     # 🔍 FILTERS (Search & Category)
     # ==================================================================
 
@@ -583,10 +604,26 @@ async def list_documents(
         )
     
     # ==================================================================
+    # 📄 SORTING
+    # ==================================================================
+    if sort_by == "recent":
+        query = query.order_by(Document.uploaded_at.desc())
+    elif sort_by == "oldest":
+        query = query.order_by(Document.uploaded_at.asc())
+    elif sort_by == "title-asc":
+        query = query.order_by(DocumentMetadata.title.asc())
+    elif sort_by == "title-desc":
+        query = query.order_by(DocumentMetadata.title.desc())
+    elif sort_by == "department":
+        query = query.order_by(DocumentMetadata.department.asc())
+    else:
+        # Default to recent
+        query = query.order_by(Document.uploaded_at.desc())
+    
+    # ==================================================================
     # 📄 PAGINATION
     # ==================================================================
     total_count = query.count()
-    query = query.order_by(Document.uploaded_at.desc())
     
     if limit > 0:
         query = query.limit(limit).offset(offset)
@@ -595,7 +632,7 @@ async def list_documents(
     
     # Format Response
     documents = []
-    for doc, meta in results:
+    for doc, meta, user in results:
         # If user_description exists, use it. Otherwise, use AI summary.
         display_description = doc.user_description if doc.user_description else (meta.summary if meta else "")
         documents.append({
@@ -609,7 +646,12 @@ async def list_documents(
             "year": meta.date_published.year if meta and meta.date_published else datetime.now().year,
             "created_at": doc.uploaded_at,
             "updated_at": meta.updated_at if meta else doc.uploaded_at,
-            "institution_id": doc.institution_id
+            "institution_id": doc.institution_id,
+            "uploader": {
+                "name": user.name if user else "Unknown",
+                "role": user.role if user else "Unknown"
+            }
+
         })
     
     return {
@@ -809,28 +851,92 @@ async def download_document(
         if current_user.role not in ["developer", "moe_admin"] and current_user.id != doc.uploader_id:
              raise HTTPException(status_code=403, detail="Download not allowed for this document")
     
-    # 2. File Existence Check
-    if not doc.file_path or not os.path.exists(doc.file_path):
-        raise HTTPException(status_code=404, detail="File not found on server")
+    # 2. Check if file is stored in S3/Supabase or locally
+    if doc.s3_url:
+        # File is stored in Supabase Storage - stream it with proper headers
+        import httpx
+        import mimetypes
+        from fastapi.responses import StreamingResponse
+        
+        try:
+            # Download file from S3
+            async with httpx.AsyncClient() as client:
+                response = await client.get(doc.s3_url)
+                response.raise_for_status()
+                
+                # Determine MIME type
+                mime_type, _ = mimetypes.guess_type(doc.filename)
+                if not mime_type:
+                    mime_type = "application/octet-stream"
+                
+                # Log the Download (Audit Trail)
+                audit = AuditLog(
+                    user_id=current_user.id,
+                    action="document_downloaded",
+                    action_metadata={
+                        "document_id": document_id,
+                        "filename": doc.filename,
+                        "user_role": current_user.role,
+                        "storage": "supabase"
+                    }
+                )
+                db.add(audit)
+                db.commit()
+                
+                # Stream the file with proper headers
+                return StreamingResponse(
+                    iter([response.content]),
+                    media_type=mime_type,
+                    headers={
+                        "Content-Disposition": f'attachment; filename="{doc.filename}"'
+                    }
+                )
+                
+        except Exception as e:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Failed to download file from Supabase: {str(e)}"
+            )
     
-    # 3. Log the Download (Audit Trail)
+    # 3. File stored locally - check existence
+    if not doc.file_path:
+        raise HTTPException(
+            status_code=404, 
+            detail=f"No file path or S3 URL set for document {document_id}. Document may not have been uploaded correctly."
+        )
+    
+    if not os.path.exists(doc.file_path):
+        raise HTTPException(
+            status_code=404, 
+            detail=f"File not found at path: {doc.file_path}. The file may have been moved or deleted."
+        )
+    
+    # 4. Log the Download (Audit Trail)
     audit = AuditLog(
         user_id=current_user.id,
         action="document_downloaded",
         action_metadata={
             "document_id": document_id,
             "filename": doc.filename,
-            "user_role": current_user.role
+            "user_role": current_user.role,
+            "storage": "local"
         }
     )
     db.add(audit)
     db.commit()
     
-    # 4. Serve the File
+    # 5. Serve the File with correct MIME type
+    import mimetypes
+    mime_type, _ = mimetypes.guess_type(doc.filename)
+    
+    # Default to octet-stream if type cannot be determined
+    if not mime_type:
+        mime_type = "application/octet-stream"
+    
     return FileResponse(
         path=doc.file_path,
         filename=doc.filename,
-        media_type="application/octet-stream"
+        media_type=mime_type
     )
 
 @router.post("/embed")

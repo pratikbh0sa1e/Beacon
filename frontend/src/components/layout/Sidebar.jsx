@@ -12,6 +12,7 @@ import {
   Shield,
   Settings,
   X,
+  Star,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -21,6 +22,7 @@ import { cn } from "../../lib/utils";
 const menuItems = [
   { icon: Home, label: "Dashboard", path: "/", roles: [] },
   { icon: FileText, label: "Documents", path: "/documents", roles: [] },
+  { icon: Star, label: "Bookmarks", path: "/bookmarks", roles: [] },
   {
     icon: Upload,
     label: "Upload",
@@ -56,7 +58,7 @@ const menuItems = [
     icon: Settings,
     label: "System Health",
     path: "/admin/system",
-    roles: ADMIN_ROLES,
+    roles: ["developer"],
   },
 ];
 

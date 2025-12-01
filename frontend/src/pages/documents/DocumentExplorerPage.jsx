@@ -9,9 +9,11 @@ import {
   Eye,
   ChevronLeft,
   ChevronRight,
+  Star,
+  ArrowUpDown,
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { documentAPI } from "../../services/api";
+import { documentAPI, bookmarkAPI } from "../../services/api";
 import { PageHeader } from "../../components/common/PageHeader";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { EmptyState } from "../../components/common/EmptyState";
@@ -26,7 +28,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "../../components/ui/select";
-import { formatDate } from "../../utils/dateFormat";
+// import { formatRelativeTime } from "../../utils/dateFormat"; // Ensure you have this utility or import it
 import { DOCUMENT_CATEGORIES } from "../../constants/categories";
 import { toast } from "sonner";
 
@@ -39,23 +41,41 @@ export const DocumentExplorerPage = () => {
   // Pagination & Filter State
   const [searchTerm, setSearchTerm] = useState("");
   const [categoryFilter, setCategoryFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("recent");
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
-  const ITEMS_PER_PAGE = 9; // Number of items per page
+  const ITEMS_PER_PAGE = 9;
 
-  // Debounce search to prevent API spam
+  // Bookmark State
+  const [bookmarkedIds, setBookmarkedIds] = useState([]);
+
+  // Debounce search
   useEffect(() => {
     const timer = setTimeout(() => {
-      setPage(1); // Reset to page 1 on new search
+      setPage(1);
       fetchDocuments();
     }, 500);
     return () => clearTimeout(timer);
-  }, [searchTerm, categoryFilter]);
+  }, [searchTerm, categoryFilter, sortBy]);
 
   // Fetch when page changes
   useEffect(() => {
     fetchDocuments();
   }, [page]);
+
+  // Initial fetch for bookmarks
+  useEffect(() => {
+    fetchBookmarks();
+  }, []);
+
+  const fetchBookmarks = async () => {
+    try {
+      const response = await bookmarkAPI.list();
+      setBookmarkedIds(response.data);
+    } catch (error) {
+      console.error("Error fetching bookmarks:", error);
+    }
+  };
 
   const fetchDocuments = async () => {
     setLoading(true);
@@ -65,11 +85,11 @@ export const DocumentExplorerPage = () => {
       const response = await documentAPI.listDocuments({
         category: categoryFilter !== "all" ? categoryFilter : undefined,
         search: searchTerm || undefined,
+        sort_by: sortBy || undefined,
         limit: ITEMS_PER_PAGE,
         offset: offset,
       });
 
-      // Handle the new response structure { total, documents, ... }
       const docs = response.data?.documents || [];
       const total = response.data?.total || 0;
 
@@ -86,17 +106,47 @@ export const DocumentExplorerPage = () => {
   const handleDownload = async (docId, title) => {
     try {
       const response = await documentAPI.downloadDocument(docId);
-      const url = window.URL.createObjectURL(new Blob([response.data]));
+
+      // Extract filename from Content-Disposition header if available
+      const contentDisposition = response.headers["content-disposition"];
+      let filename = title;
+
+      if (contentDisposition) {
+        const filenameMatch = contentDisposition.match(/filename="?(.+)"?/);
+        if (filenameMatch) {
+          filename = filenameMatch[1];
+        }
+      }
+
+      // response.data is already a Blob, don't wrap it again
+      const url = window.URL.createObjectURL(response.data);
       const link = document.createElement("a");
       link.href = url;
-      link.setAttribute("download", title);
+      link.setAttribute("download", filename);
       document.body.appendChild(link);
       link.click();
       link.remove();
+      window.URL.revokeObjectURL(url); // Clean up
       toast.success("Document downloaded successfully");
     } catch (error) {
       console.error("Download error:", error);
       toast.error("Failed to download document");
+    }
+  };
+
+  const toggleBookmark = async (e, docId) => {
+    e.stopPropagation();
+    try {
+      const response = await bookmarkAPI.toggle(docId);
+      if (response.data.status === "added") {
+        setBookmarkedIds((prev) => [...prev, docId]);
+        toast.success("Bookmark added");
+      } else {
+        setBookmarkedIds((prev) => prev.filter((id) => id !== docId));
+        toast.success("Bookmark removed");
+      }
+    } catch (error) {
+      toast.error("Failed to update bookmark");
     }
   };
 
@@ -132,7 +182,7 @@ export const DocumentExplorerPage = () => {
               value={categoryFilter}
               onValueChange={(v) => {
                 setCategoryFilter(v);
-                setPage(1); // Reset page on category change
+                setPage(1);
               }}
             >
               <SelectTrigger className="w-full sm:w-48">
@@ -146,6 +196,25 @@ export const DocumentExplorerPage = () => {
                     {cat}
                   </SelectItem>
                 ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={sortBy}
+              onValueChange={(v) => {
+                setSortBy(v);
+                setPage(1);
+              }}
+            >
+              <SelectTrigger className="w-full sm:w-48">
+                <ArrowUpDown className="h-4 w-4 mr-2" />
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="recent">Most Recent</SelectItem>
+                <SelectItem value="oldest">Oldest First</SelectItem>
+                <SelectItem value="title-asc">Title (A-Z)</SelectItem>
+                <SelectItem value="title-desc">Title (Z-A)</SelectItem>
+                <SelectItem value="department">Department</SelectItem>
               </SelectContent>
             </Select>
             <div className="flex gap-2">
@@ -190,68 +259,120 @@ export const DocumentExplorerPage = () => {
                 : "space-y-4"
             }
           >
-            {documents.map((doc, index) => (
-              <motion.div
-                key={doc.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.05 }}
-              >
-                <Card className="glass-card border-border/50 hover:border-primary/50 h-full flex flex-col transition-all duration-300 hover:shadow-lg">
-                  <CardContent className="p-6 flex flex-col flex-1">
-                    <div className="flex items-start justify-between mb-4">
-                      <Badge variant="outline">{doc.category}</Badge>
-                      <Badge
-                        variant={
-                          doc.visibility === "public" ? "default" : "secondary"
-                        }
+            {documents.map((doc, index) => {
+              const isBookmarked = bookmarkedIds.includes(doc.id);
+
+              return (
+                <motion.div
+                  key={doc.id}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ delay: index * 0.05 }}
+                >
+                  <Card className="glass-card border-border/50 hover:border-primary/50 h-full flex flex-col transition-all duration-300 hover:shadow-lg">
+                    <CardContent className="p-6 flex flex-col flex-1">
+                      <div className="flex items-start justify-between mb-4">
+                        <Badge variant="outline">{doc.category}</Badge>
+                        <div className="flex gap-2">
+                          <Badge
+                            variant={
+                              doc.visibility === "public"
+                                ? "default"
+                                : "secondary"
+                            }
+                          >
+                            {doc.visibility}
+                          </Badge>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className={`h-6 w-6 ${
+                              isBookmarked
+                                ? "text-yellow-500 hover:text-yellow-600 hover:bg-yellow-500/10"
+                                : "text-muted-foreground"
+                            }`}
+                            onClick={(e) => toggleBookmark(e, doc.id)}
+                          >
+                            <Star
+                              className={`h-4 w-4 ${
+                                isBookmarked ? "fill-current" : ""
+                              }`}
+                            />
+                          </Button>
+                        </div>
+                      </div>
+
+                      <h3
+                        className="font-semibold text-lg mb-2 line-clamp-2"
+                        title={doc.title}
                       >
-                        {doc.visibility}
-                      </Badge>
-                    </div>
-                    <h3
-                      className="font-semibold text-lg mb-2 line-clamp-2"
-                      title={doc.title}
-                    >
-                      {doc.title}
-                    </h3>
-                    <p className="text-sm text-muted-foreground mb-4 line-clamp-3 flex-1">
-                      {doc.description || "No description available"}
-                    </p>
-                    <div className="space-y-2 text-xs text-muted-foreground mb-4">
-                      <p>Department: {doc.department}</p>
-                      <p>Year: {doc.year}</p>
-                      <p>Updated: {formatRelativeTime(doc.updated_at)}</p>
-                    </div>
-                    <div className="flex gap-2 mt-auto">
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        className="flex-1"
-                        onClick={() => navigate(`/documents/${doc.id}`)}
-                      >
-                        <Eye className="h-4 w-4 mr-2" />
-                        View
-                      </Button>
-                      {doc.download_allowed && (
+                        {doc.title}
+                      </h3>
+
+                      {/* Uploader Info */}
+                      {doc.uploader && (
+                        <div className="flex items-center gap-2 mb-3">
+                          <div className="h-6 w-6 rounded-full bg-secondary flex items-center justify-center text-xs font-bold">
+                            {doc.uploader.name.charAt(0)}
+                          </div>
+                          <div className="flex flex-col">
+                            <span className="text-xs font-medium">
+                              {doc.uploader.name}
+                            </span>
+                            <span className="text-[10px] text-muted-foreground capitalize">
+                              {doc.uploader.role
+                                ? doc.uploader.role.replace("_", " ")
+                                : "Unknown Role"}
+                            </span>
+                          </div>
+                        </div>
+                      )}
+
+                      <p className="text-sm text-muted-foreground mb-4 line-clamp-3 flex-1">
+                        {doc.description || "No description available"}
+                      </p>
+
+                      <div className="space-y-2 text-xs text-muted-foreground mb-4">
+                        <p>Department: {doc.department}</p>
+                        <p>Year: {doc.year}</p>
+                        <p>
+                          Updated:{" "}
+                          {formatRelativeTime
+                            ? formatRelativeTime(doc.updated_at)
+                            : doc.updated_at}
+                        </p>
+                      </div>
+
+                      <div className="flex gap-2 mt-auto">
                         <Button
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => handleDownload(doc.id, doc.title)}
+                          onClick={() => navigate(`/documents/${doc.id}`)}
                         >
-                          <Download className="h-4 w-4 mr-2" />
-                          Download
+                          <Eye className="h-4 w-4 mr-2" />
+                          View
                         </Button>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              </motion.div>
-            ))}
+                        {doc.download_allowed && (
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="flex-1"
+                            onClick={() => handleDownload(doc.id, doc.title)}
+                          >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                          </Button>
+                        )}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </motion.div>
+              );
+            })}
           </div>
 
-          {/* ✅ Pagination Controls */}
+          {/* Pagination Controls */}
           <div className="flex items-center justify-between pt-4 border-t border-border/40">
             <p className="text-sm text-muted-foreground">
               Page {page} of {totalPages}
@@ -283,7 +404,7 @@ export const DocumentExplorerPage = () => {
   );
 };
 
-// Helper function for relative time if not imported
+// Helper function if not imported
 function formatRelativeTime(dateString) {
   if (!dateString) return "";
   const date = new Date(dateString);

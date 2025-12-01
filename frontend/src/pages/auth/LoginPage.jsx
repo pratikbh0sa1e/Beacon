@@ -44,6 +44,10 @@ export const LoginPage = () => {
       }
     } catch (error) {
       console.error("Login error:", error);
+
+      if (error.code === "ERR_NETWORK") {
+        toast.error("Cannot connect to server. Is the backend running?");
+      }
       if (error.response && error.response.status === 403) {
         navigate("/pending-approval");
         return;
