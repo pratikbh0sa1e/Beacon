@@ -183,27 +183,35 @@ const Message = ({ message, isUser, onCitationClick }) => (
 
 export const AIChatPage = () => {
   const navigate = useNavigate();
-  const { messages, sendMessage, initialize, loading: storeLoading } = useChatStore();
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      text: "Hello! I'm the **BEACON AI Assistant**. Ask me anything about your documents, and I'll help you find the information you need. You can type your question or use voice input! 🎤",
-      isUser: false,
-    },
-  ]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [streamingMessage, setStreamingMessage] = useState(null);
   const [isRecording, setIsRecording] = useState(false);
   const [mediaRecorder, setMediaRecorder] = useState(null);
   const [audioChunks, setAudioChunks] = useState([]);
   const messagesEndRef = useRef(null);
-
-  // Initialize chat store on mount
-  useEffect(() => {
-    initialize();
-  }, []);
   const fileInputRef = useRef(null);
+
+  // Use chat store for session management
+  const {
+    messages,
+    currentSessionId,
+    loading,
+    sendMessage,
+    createSession,
+    fetchSessions,
+    clearCurrentSession,
+  } = useChatStore();
+
+  // Initialize chat store on mount and show welcome message if no session
+  useEffect(() => {
+    const initializeChat = async () => {
+      await fetchSessions();
+      // If no current session and no messages, show welcome message
+      if (!currentSessionId && messages.length === 0) {
+        clearCurrentSession();
+      }
+    };
+    initializeChat();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -217,17 +225,20 @@ export const AIChatPage = () => {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const currentInput = input;
+    const messageText = input;
     setInput("");
-    setLoading(true);
 
     try {
-      await sendMessage(currentInput);
+      // If no current session, create one
+      if (!currentSessionId) {
+        await createSession(messageText.substring(0, 50));
+      }
+
+      // Send message through chat store
+      await sendMessage(messageText);
     } catch (error) {
       console.error("Chat error:", error);
       toast.error("Failed to send message");
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -246,7 +257,11 @@ export const AIChatPage = () => {
 
       recorder.onstop = async () => {
         const audioBlob = new Blob(chunks, { type: "audio/webm" });
-        await handleVoiceQuery(audioBlob);
+        // Convert Blob to File for backend compatibility
+        const audioFile = new File([audioBlob], "recording.webm", {
+          type: "audio/webm",
+        });
+        await handleVoiceQuery(audioFile);
         stream.getTracks().forEach((track) => track.stop());
       };
 
@@ -283,58 +298,29 @@ export const AIChatPage = () => {
     }
   };
 
+  const [isTranscribing, setIsTranscribing] = useState(false);
+
   const handleVoiceQuery = async (audioFile) => {
-    setLoading(true);
+    setIsTranscribing(true);
 
     try {
-      // Show user message indicating voice input
-      const userMessage = {
-        id: Date.now(),
-        text: "🎤 Voice message...",
-        isUser: true,
-      };
-      setMessages((prev) => [...prev, userMessage]);
-
       // Send to voice API
       const response = await voiceAPI.query(audioFile);
-      const { transcription, answer, citations, confidence, language } =
-        response.data;
+      const { transcription } = response.data;
 
-      // Update user message with transcription
-      setMessages((prev) =>
-        prev.map((msg) =>
-          msg.id === userMessage.id
-            ? { ...msg, text: `🎤 "${transcription}"` }
-            : msg
-        )
-      );
+      setIsTranscribing(false);
 
-      // Add AI response
-      const aiMessage = {
-        id: Date.now() + 1,
-        text: answer,
-        isUser: false,
-        citations: citations || [],
-        confidence: confidence || 0,
-        language: language,
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
-      toast.success("Voice query processed successfully");
+      // Auto-send the transcription
+      if (!currentSessionId) {
+        await createSession(transcription.substring(0, 50));
+      }
+      await sendMessage(transcription);
     } catch (error) {
+      setIsTranscribing(false);
       console.error("Voice query error:", error);
-      const errorMessage = {
-        id: Date.now() + 1,
-        text: "I apologize, but I encountered an error processing your voice message. Please try again or type your question.",
-        isUser: false,
-        isError: true,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
       toast.error(
         error.response?.data?.detail || "Failed to process voice query"
       );
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -457,101 +443,127 @@ export const AIChatPage = () => {
         {/* Main Chat Area */}
         <Card className="glass-card border-border/50 flex-1 flex flex-col overflow-hidden">
           <CardContent className="p-6 flex-1 flex flex-col min-h-0">
-          <div className="flex-1 overflow-y-auto min-h-0 space-y-6 mb-4 scrollbar-hide">
-            <AnimatePresence>
-              {messages.map((message) => (
-                <Message
-                  key={message.id}
-                  message={message}
-                  isUser={message.isUser}
-                  onCitationClick={handleCitationClick}
-                />
-              ))}
-            </AnimatePresence>
-            {loading && (
-              <motion.div
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                className="flex gap-3"
-              >
-                <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                  <Bot className="h-5 w-5 text-primary" />
-                </div>
-                <div className="glass-card border-border/50 rounded-2xl px-4 py-3">
-                  <div className="flex items-center gap-2">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{
-                        duration: 1,
-                        repeat: Infinity,
-                        ease: "linear",
-                      }}
-                    >
-                      <Loader2 className="h-4 w-4 text-primary" />
-                    </motion.div>
-                    <span className="text-sm text-muted-foreground">
-                      Thinking...
-                    </span>
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-6 mb-4 scrollbar-hide">
+              <AnimatePresence>
+                {messages.map((message) => (
+                  <Message
+                    key={message.id}
+                    message={message}
+                    isUser={message.isUser}
+                    onCitationClick={handleCitationClick}
+                  />
+                ))}
+              </AnimatePresence>
+              {isTranscribing && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex gap-3 justify-end"
+                >
+                  <div className="bg-primary text-primary-foreground rounded-2xl px-4 py-3 order-first">
+                    <div className="flex items-center gap-2">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
+                      >
+                        <Loader2 className="h-4 w-4" />
+                      </motion.div>
+                      <span className="text-sm">Transcribing...</span>
+                    </div>
                   </div>
-                </div>
-              </motion.div>
-            )}
-            <div ref={messagesEndRef} />
-          </div>
-
-          <div className="border-t border-border/40 pt-4">
-            <div className="flex gap-2">
-              <Input
-                placeholder="Ask me anything about your documents..."
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={handleKeyPress}
-                disabled={loading}
-                className="flex-1"
-              />
-              <input
-                type="file"
-                ref={fileInputRef}
-                onChange={handleFileUpload}
-                accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
-                className="hidden"
-              />
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={loading}
-                variant="outline"
-                title="Upload audio file"
-              >
-                <Upload className="h-4 w-4" />
-              </Button>
-              <Button
-                onClick={toggleRecording}
-                disabled={loading}
-                variant={isRecording ? "destructive" : "outline"}
-                title={isRecording ? "Stop recording" : "Start recording"}
-              >
-                {isRecording ? (
-                  <MicOff className="h-4 w-4" />
-                ) : (
-                  <Mic className="h-4 w-4" />
-                )}
-              </Button>
-              <Button
-                onClick={handleSend}
-                disabled={!input.trim() || loading}
-                className="neon-glow"
-              >
-                <Send className="h-4 w-4" />
-              </Button>
+                  <div className="h-8 w-8 rounded-full bg-accent/10 flex items-center justify-center flex-shrink-0">
+                    <User className="h-5 w-5 text-accent" />
+                  </div>
+                </motion.div>
+              )}
+              {loading && (
+                <motion.div
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  className="flex gap-3"
+                >
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                    <Bot className="h-5 w-5 text-primary" />
+                  </div>
+                  <div className="glass-card border-border/50 rounded-2xl px-4 py-3">
+                    <div className="flex items-center gap-2">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{
+                          duration: 1,
+                          repeat: Infinity,
+                          ease: "linear",
+                        }}
+                      >
+                        <Loader2 className="h-4 w-4 text-primary" />
+                      </motion.div>
+                      <span className="text-sm text-muted-foreground">
+                        Thinking...
+                      </span>
+                    </div>
+                  </div>
+                </motion.div>
+              )}
+              <div ref={messagesEndRef} />
             </div>
-            <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-              <AlertCircle className="h-3 w-3" />
-              AI responses may not always be accurate. Verify important
-              information. Use 🎤 for voice queries.
-            </p>
-          </div>
-        </CardContent>
-      </Card>
+
+            <div className="border-t border-border/40 pt-4">
+              <div className="flex gap-2">
+                <Input
+                  placeholder="Ask me anything about your documents..."
+                  value={input}
+                  onChange={(e) => setInput(e.target.value)}
+                  onKeyPress={handleKeyPress}
+                  disabled={loading}
+                  className="flex-1"
+                />
+                <input
+                  type="file"
+                  ref={fileInputRef}
+                  onChange={handleFileUpload}
+                  accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac,.webm"
+                  className="hidden"
+                />
+                <Button
+                  onClick={() => fileInputRef.current?.click()}
+                  disabled={loading}
+                  variant="outline"
+                  title="Upload audio file"
+                >
+                  <Upload className="h-4 w-4" />
+                </Button>
+                <Button
+                  onClick={toggleRecording}
+                  disabled={loading}
+                  variant={isRecording ? "destructive" : "outline"}
+                  title={isRecording ? "Stop recording" : "Start recording"}
+                >
+                  {isRecording ? (
+                    <MicOff className="h-4 w-4" />
+                  ) : (
+                    <Mic className="h-4 w-4" />
+                  )}
+                </Button>
+                <Button
+                  onClick={handleSend}
+                  disabled={!input.trim() || loading}
+                  className="neon-glow"
+                >
+                  <Send className="h-4 w-4" />
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
+                <AlertCircle className="h-3 w-3" />
+                AI responses may not always be accurate. Verify important
+                information. Use 🎤 for voice queries.
+              </p>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

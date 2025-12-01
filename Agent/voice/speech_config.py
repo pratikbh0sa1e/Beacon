@@ -69,7 +69,7 @@ WHISPER_MODEL_SIZE = "base"  # Good balance of speed and accuracy
 # Audio Processing Settings
 # ============================================
 AUDIO_CONFIG = {
-    "supported_formats": ["mp3", "wav", "m4a", "ogg", "flac"],
+    "supported_formats": ["mp3", "wav", "m4a", "ogg", "flac", "webm"],  # Added webm for browser recording
     "max_file_size_mb": 25,  # Maximum audio file size
     "sample_rate": 16000,  # Target sample rate for processing
     "enable_noise_reduction": True,  # Reduce background noise

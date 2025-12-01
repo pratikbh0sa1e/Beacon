@@ -36,6 +36,9 @@ class SessionResponse(BaseModel):
     
     class Config:
         from_attributes = True
+        json_encoders = {
+            datetime: lambda v: v.isoformat() + 'Z' if v else None  # Add 'Z' to indicate UTC
+        }
 
 
 class MessageResponse(BaseModel):
@@ -48,6 +51,9 @@ class MessageResponse(BaseModel):
     created_at: datetime
     
     class Config:
+        json_encoders = {
+            datetime: lambda v: v.isoformat() + 'Z' if v else None  # Add 'Z' to indicate UTC
+        }
         from_attributes = True
 
 

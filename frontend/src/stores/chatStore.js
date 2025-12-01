@@ -19,7 +19,7 @@ export const useChatStore = create((set, get) => ({
    * Fetch all sessions from backend
    */
   fetchSessions: async (params = {}) => {
-    set({ loading: true, error: null });
+    // Don't set loading state here - it interferes with message sending
     try {
       const response = await chatAPI.listSessions(params);
       const sessions = response.data.sessions.map((session) => ({
@@ -32,11 +32,11 @@ export const useChatStore = create((set, get) => ({
         lastMessage: session.last_message || null,
       }));
 
-      set({ sessions, loading: false });
+      set({ sessions });
       return sessions;
     } catch (error) {
       console.error("Error fetching sessions:", error);
-      set({ error: error.message, loading: false });
+      set({ error: error.message });
       toast.error("Failed to load chat sessions");
       return [];
     }
@@ -46,7 +46,6 @@ export const useChatStore = create((set, get) => ({
    * Create a new session
    */
   createSession: async (title = null) => {
-    set({ loading: true, error: null });
     try {
       const response = await chatAPI.createSession(title);
       const newSession = {
@@ -59,11 +58,18 @@ export const useChatStore = create((set, get) => ({
         lastMessage: null,
       };
 
+      // Add welcome message
+      const welcomeMessage = {
+        id: Date.now(),
+        text: "Hi! I'm Beacon Assistant. I can help you find information from your documents. What would you like to know?",
+        isUser: false,
+        timestamp: new Date().toISOString(),
+      };
+
       set((state) => ({
         sessions: [newSession, ...state.sessions],
         currentSessionId: newSession.id,
-        messages: [],
-        loading: false,
+        messages: [welcomeMessage],
       }));
 
       // Save to localStorage for persistence
@@ -72,7 +78,7 @@ export const useChatStore = create((set, get) => ({
       return newSession.id;
     } catch (error) {
       console.error("Error creating session:", error);
-      set({ error: error.message, loading: false });
+      set({ error: error.message });
       toast.error("Failed to create new chat");
       return null;
     }
@@ -82,7 +88,7 @@ export const useChatStore = create((set, get) => ({
    * Load a session and its messages
    */
   loadSession: async (sessionId) => {
-    set({ loading: true, error: null, currentSessionId: sessionId });
+    set({ error: null, currentSessionId: sessionId });
     try {
       const response = await chatAPI.getSessionMessages(sessionId);
       const messages = response.data.messages.map((msg) => ({
@@ -94,7 +100,7 @@ export const useChatStore = create((set, get) => ({
         timestamp: msg.created_at,
       }));
 
-      set({ messages, loading: false });
+      set({ messages });
 
       // Save to localStorage
       localStorage.setItem("beacon-active-session", sessionId.toString());
@@ -102,7 +108,7 @@ export const useChatStore = create((set, get) => ({
       return messages;
     } catch (error) {
       console.error("Error loading session:", error);
-      set({ error: error.message, loading: false });
+      set({ error: error.message });
       toast.error("Failed to load chat history");
       return [];
     }
@@ -132,6 +138,7 @@ export const useChatStore = create((set, get) => ({
 
     set((state) => ({
       messages: [...state.messages, userMessage],
+      loading: true, // Set loading when sending message
     }));
 
     try {
@@ -151,10 +158,11 @@ export const useChatStore = create((set, get) => ({
       set((state) => ({
         messages: [...state.messages, aiMessage],
         currentSessionId: response.data.session_id, // Update if new session was created
+        loading: false, // Clear loading after response
       }));
 
       // Refresh sessions list to update message count and last message
-      get().fetchSessions();
+      await get().fetchSessions();
 
       return aiMessage;
     } catch (error) {
@@ -164,6 +172,7 @@ export const useChatStore = create((set, get) => ({
       // Remove user message on error
       set((state) => ({
         messages: state.messages.filter((m) => m.id !== userMessage.id),
+        loading: false, // Clear loading on error
       }));
 
       return null;
@@ -206,6 +215,24 @@ export const useChatStore = create((set, get) => ({
   },
 
   /**
+   * Clear current session (start new chat without creating session)
+   */
+  clearCurrentSession: () => {
+    // Add welcome message for new chat
+    const welcomeMessage = {
+      id: Date.now(),
+      text: "Hi! I'm Beacon Assistant. I can help you find information from your documents. What would you like to know?",
+      isUser: false,
+      timestamp: new Date().toISOString(),
+    };
+
+    set({
+      currentSessionId: null,
+      messages: [welcomeMessage],
+    });
+  },
+
+  /**
    * Rename a session
    */
   renameSession: async (sessionId, newTitle) => {
@@ -235,7 +262,7 @@ export const useChatStore = create((set, get) => ({
    * Search sessions
    */
   searchSessions: async (query) => {
-    set({ searchQuery: query, loading: true });
+    set({ searchQuery: query });
 
     if (!query.trim()) {
       // If empty query, fetch all sessions
@@ -255,10 +282,9 @@ export const useChatStore = create((set, get) => ({
         lastMessage: session.last_message || null,
       }));
 
-      set({ sessions, loading: false });
+      set({ sessions });
     } catch (error) {
       console.error("Error searching sessions:", error);
-      set({ loading: false });
       toast.error("Failed to search chats");
     }
   },

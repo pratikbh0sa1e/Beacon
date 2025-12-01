@@ -263,8 +263,7 @@ async def logout(current_user: User = Depends(get_current_user), db: Session = D
     return {"message": "Successfully logged out"}
 
 
-@ro
-uter.get("/verify-email/{token}")
+@router.get("/verify-email/{token}")
 async def verify_email(token: str, db: Session = Depends(get_db)):
     """
     Verify user email with token
