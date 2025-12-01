@@ -10,6 +10,7 @@ from backend.routers import (
     bookmark_router,
     approval_router,
     chat_router,
+    chat_history_router,
     audit_router,
     data_source_router,
     notification_router,    
@@ -60,6 +61,7 @@ app.include_router(institution_domain_router.router, tags=["institution-domains"
 app.include_router(document_router.router, prefix="/documents", tags=["documents"])
 app.include_router(approval_router.router, prefix="/approvals", tags=["approvals"])
 app.include_router(chat_router.router, prefix="/chat", tags=["chat"])
+app.include_router(chat_history_router.router, prefix="/chat", tags=["chat-history"])
 app.include_router(voice_router.router, tags=["voice"])  # Voice query support
 app.include_router(audit_router.router, prefix="/audit", tags=["audit"])
 app.include_router(data_source_router.router, prefix="/data-sources", tags=["data-sources"])

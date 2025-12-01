@@ -139,8 +139,33 @@ export const auditAPI = {
 
 // ============ CHAT ENDPOINTS ============
 export const chatAPI = {
-  query: (question, filters) => api.post("/chat/query", { question, filters }),
-  getHistory: () => api.get("/chat/history"),
+  // Chat query (modified to include session_id)
+  query: (question, sessionId = null) => 
+    api.post("/chat/query", { 
+      question, 
+      session_id: sessionId 
+    }),
+  
+  // Chat history management
+  createSession: (title = null) => 
+    api.post("/chat/sessions", { title }),
+  
+  listSessions: (params = {}) => 
+    api.get("/chat/sessions", { params }),
+  
+  getSessionMessages: (sessionId) => 
+    api.get(`/chat/sessions/${sessionId}/messages`),
+  
+  updateSessionTitle: (sessionId, title) => 
+    api.put(`/chat/sessions/${sessionId}`, { title }),
+  
+  deleteSession: (sessionId) => 
+    api.delete(`/chat/sessions/${sessionId}`),
+  
+  searchSessions: (query, limit = 20) => 
+    api.get("/chat/sessions/search", { 
+      params: { q: query, limit } 
+    }),
 };
 
 // ============ VOICE ENDPOINTS ============
