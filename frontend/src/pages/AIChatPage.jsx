@@ -12,8 +12,11 @@ import {
   FileText,
   AlertCircle,
   ExternalLink,
+  Mic,
+  MicOff,
+  Upload,
 } from "lucide-react";
-import { chatAPI } from "../services/api";
+import { chatAPI, voiceAPI } from "../services/api";
 import { PageHeader } from "../components/common/PageHeader";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -181,14 +184,18 @@ export const AIChatPage = () => {
   const [messages, setMessages] = useState([
     {
       id: 1,
-      text: "Hello! I'm the **BEACON AI Assistant**. Ask me anything about your documents, and I'll help you find the information you need.",
+      text: "Hello! I'm the **BEACON AI Assistant**. Ask me anything about your documents, and I'll help you find the information you need. You can type your question or use voice input! 🎤",
       isUser: false,
     },
   ]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const [streamingMessage, setStreamingMessage] = useState(null);
+  const [isRecording, setIsRecording] = useState(false);
+  const [mediaRecorder, setMediaRecorder] = useState(null);
+  const [audioChunks, setAudioChunks] = useState([]);
   const messagesEndRef = useRef(null);
+  const fileInputRef = useRef(null);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -235,6 +242,113 @@ export const AIChatPage = () => {
       };
       setMessages((prev) => [...prev, errorMessage]);
       toast.error("Failed to get AI response");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Voice recording handlers
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const recorder = new MediaRecorder(stream);
+      const chunks = [];
+
+      recorder.ondataavailable = (e) => {
+        if (e.data.size > 0) {
+          chunks.push(e.data);
+        }
+      };
+
+      recorder.onstop = async () => {
+        const audioBlob = new Blob(chunks, { type: "audio/webm" });
+        await handleVoiceQuery(audioBlob);
+        stream.getTracks().forEach((track) => track.stop());
+      };
+
+      recorder.start();
+      setMediaRecorder(recorder);
+      setAudioChunks(chunks);
+      setIsRecording(true);
+      toast.info("Recording... Click again to stop");
+    } catch (error) {
+      console.error("Error accessing microphone:", error);
+      toast.error("Could not access microphone. Please check permissions.");
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorder && mediaRecorder.state === "recording") {
+      mediaRecorder.stop();
+      setIsRecording(false);
+    }
+  };
+
+  const toggleRecording = () => {
+    if (isRecording) {
+      stopRecording();
+    } else {
+      startRecording();
+    }
+  };
+
+  const handleFileUpload = (event) => {
+    const file = event.target.files[0];
+    if (file) {
+      handleVoiceQuery(file);
+    }
+  };
+
+  const handleVoiceQuery = async (audioFile) => {
+    setLoading(true);
+
+    try {
+      // Show user message indicating voice input
+      const userMessage = {
+        id: Date.now(),
+        text: "🎤 Voice message...",
+        isUser: true,
+      };
+      setMessages((prev) => [...prev, userMessage]);
+
+      // Send to voice API
+      const response = await voiceAPI.query(audioFile);
+      const { transcription, answer, citations, confidence, language } =
+        response.data;
+
+      // Update user message with transcription
+      setMessages((prev) =>
+        prev.map((msg) =>
+          msg.id === userMessage.id
+            ? { ...msg, text: `🎤 "${transcription}"` }
+            : msg
+        )
+      );
+
+      // Add AI response
+      const aiMessage = {
+        id: Date.now() + 1,
+        text: answer,
+        isUser: false,
+        citations: citations || [],
+        confidence: confidence || 0,
+        language: language,
+      };
+
+      setMessages((prev) => [...prev, aiMessage]);
+      toast.success("Voice query processed successfully");
+    } catch (error) {
+      console.error("Voice query error:", error);
+      const errorMessage = {
+        id: Date.now() + 1,
+        text: "I apologize, but I encountered an error processing your voice message. Please try again or type your question.",
+        isUser: false,
+        isError: true,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+      toast.error(
+        error.response?.data?.detail || "Failed to process voice query"
+      );
     } finally {
       setLoading(false);
     }
@@ -412,6 +526,33 @@ export const AIChatPage = () => {
                 disabled={loading}
                 className="flex-1"
               />
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileUpload}
+                accept="audio/*,.mp3,.wav,.m4a,.ogg,.flac"
+                className="hidden"
+              />
+              <Button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={loading}
+                variant="outline"
+                title="Upload audio file"
+              >
+                <Upload className="h-4 w-4" />
+              </Button>
+              <Button
+                onClick={toggleRecording}
+                disabled={loading}
+                variant={isRecording ? "destructive" : "outline"}
+                title={isRecording ? "Stop recording" : "Start recording"}
+              >
+                {isRecording ? (
+                  <MicOff className="h-4 w-4" />
+                ) : (
+                  <Mic className="h-4 w-4" />
+                )}
+              </Button>
               <Button
                 onClick={handleSend}
                 disabled={!input.trim() || loading}
@@ -423,7 +564,7 @@ export const AIChatPage = () => {
             <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
               <AlertCircle className="h-3 w-3" />
               AI responses may not always be accurate. Verify important
-              information.
+              information. Use 🎤 for voice queries.
             </p>
           </div>
         </CardContent>

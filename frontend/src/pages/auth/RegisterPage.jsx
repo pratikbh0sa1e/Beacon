@@ -110,8 +110,11 @@ export const RegisterPage = () => {
           : null,
       });
 
-      toast.success("Registration successful! Please wait for admin approval.");
-      navigate("/login");
+      toast.success(
+        "Registration successful! Please check your email to verify your account."
+      );
+      // Navigate to a success page showing email verification message
+      navigate("/register-success", { state: { email: formData.email } });
     } catch (error) {
       console.error("Registration error:", error);
       toast.error(

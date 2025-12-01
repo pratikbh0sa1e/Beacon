@@ -47,15 +47,25 @@ export const LoginPage = () => {
 
       if (error.code === "ERR_NETWORK") {
         toast.error("Cannot connect to server. Is the backend running?");
-      }
-      if (error.response && error.response.status === 403) {
+      } else if (error.response && error.response.status === 403) {
+        const errorDetail = error.response.data?.detail || "";
+
+        // Check if it's an email verification error
+        if (errorDetail.includes("verify your email")) {
+          toast.error("Please verify your email address before logging in");
+          navigate("/resend-verification");
+          return;
+        }
+
+        // Otherwise it's pending approval
         navigate("/pending-approval");
         return;
+      } else {
+        toast.error(
+          error.response?.data?.detail ||
+            "Login failed. Please check your credentials."
+        );
       }
-      toast.error(
-        error.response?.data?.detail ||
-          "Login failed. Please check your credentials."
-      );
     } finally {
       setLoading(false);
     }

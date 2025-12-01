@@ -66,6 +66,11 @@ class User(Base):
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True)
     approved = Column(Boolean, default=False, nullable=False, index=True)
     
+    # Email verification fields
+    email_verified = Column(Boolean, default=False, nullable=False, index=True)
+    verification_token = Column(String(255), nullable=True, unique=True, index=True)
+    verification_token_expires = Column(DateTime, nullable=True)
+    
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

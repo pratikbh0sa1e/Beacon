@@ -5,6 +5,7 @@ from backend.routers import (
     auth_router,
     user_router,
     institution_router,
+    institution_domain_router,
     document_router,
     bookmark_router,
     approval_router,
@@ -12,7 +13,7 @@ from backend.routers import (
     audit_router,
     data_source_router,
     notification_router,    
-   voice_router
+    voice_router
 )
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
@@ -55,6 +56,7 @@ app.include_router(auth_router.router, prefix="/auth", tags=["authentication"])
 app.include_router(user_router.router, prefix="/users", tags=["user-management"])
 app.include_router(bookmark_router.router, prefix="/bookmark")
 app.include_router(institution_router.router, prefix="/institutions", tags=["institutions"])
+app.include_router(institution_domain_router.router, tags=["institution-domains"])
 app.include_router(document_router.router, prefix="/documents", tags=["documents"])
 app.include_router(approval_router.router, prefix="/approvals", tags=["approvals"])
 app.include_router(chat_router.router, prefix="/chat", tags=["chat"])

@@ -14,6 +14,9 @@ import { ActivityTracker } from "./components/auth/ActivityTracker";
 // Auth Pages
 import { LoginPage } from "./pages/auth/LoginPage";
 import { RegisterPage } from "./pages/auth/RegisterPage";
+import { RegisterSuccessPage } from "./pages/auth/RegisterSuccessPage";
+import { VerifyEmailPage } from "./pages/auth/VerifyEmailPage";
+import { ResendVerificationPage } from "./pages/auth/ResendVerificationPage";
 import { PendingApprovalPage } from "./pages/auth/PendingApprovalPage";
 
 // Main Pages
@@ -35,6 +38,7 @@ import { AnalyticsPage } from "./pages/admin/AnalyticsPage";
 import { SystemHealthPage } from "./pages/admin/SystemHealthPage";
 
 // Bookmark Page
+import { NotFoundPage } from "./pages/NotFoundPage";
 import { BookmarksPage } from "./pages/BookmarksPage";
 
 // User Pages
@@ -75,6 +79,33 @@ const App = () => {
           element={
             <PublicRoute>
               <RegisterPage />
+            </PublicRoute>
+          }
+        />
+
+        <Route
+          path="/register-success"
+          element={
+            <PublicRoute>
+              <RegisterSuccessPage />
+            </PublicRoute>
+          }
+        />
+
+        <Route
+          path="/verify-email"
+          element={
+            <PublicRoute>
+              <VerifyEmailPage />
+            </PublicRoute>
+          }
+        />
+
+        <Route
+          path="/resend-verification"
+          element={
+            <PublicRoute>
+              <ResendVerificationPage />
             </PublicRoute>
           }
         />
@@ -169,7 +200,8 @@ const App = () => {
           <Route path="*" element={<Navigate to="/" replace />} />
         </Route>
 
-        <Route path="*" element={<Navigate to="/" replace />} />
+        {/* 404 - Catch all unmatched routes */}
+        <Route path="*" element={<NotFoundPage />} />
       </Routes>
     </BrowserRouter>
   );

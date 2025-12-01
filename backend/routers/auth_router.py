@@ -105,14 +105,24 @@ async def get_current_user(
 @router.post("/register", response_model=UserResponse)
 async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
-    Register a new user
+    Register a new user with email verification
     
     - Developer and Public Viewer are auto-approved
     - Others need approval from their admin
+    - All users must verify their email
     """
+    from backend.utils.email_validator import validate_email
+    from backend.utils.email_service import send_verification_email
+    import secrets
+    
     # Validate role
     if request.role not in ALL_ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {ALL_ROLES}")
+    
+    # Validate email format and domain
+    is_valid, error_message = validate_email(request.email, request.role)
+    if not is_valid:
+        raise HTTPException(status_code=400, detail=error_message)
     
     # Check if email already exists
     existing_user = db.query(User).filter(User.email == request.email).first()
@@ -127,6 +137,10 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     # Hash password
     hashed_password = hash_password(request.password)
     
+    # Generate verification token
+    verification_token = secrets.token_urlsafe(32)
+    token_expires = datetime.utcnow() + timedelta(hours=24)
+    
     # Auto-approve for developer and public_viewer
     auto_approved_roles = [DEVELOPER, PUBLIC_VIEWER]
     approved = request.role in auto_approved_roles
@@ -138,12 +152,22 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
         password_hash=hashed_password,
         role=request.role,
         institution_id=request.institution_id,
-        approved=approved
+        approved=approved,
+        email_verified=False,
+        verification_token=verification_token,
+        verification_token_expires=token_expires
     )
     
     db.add(user)
     db.commit()
     db.refresh(user)
+    
+    # Send verification email
+    try:
+        send_verification_email(user.email, user.name, verification_token)
+    except Exception as e:
+        # Log error but don't fail registration
+        print(f"Failed to send verification email: {str(e)}")
     
     return user
 
@@ -168,6 +192,13 @@ async def login(request: LoginRequest, db: Session = Depends(get_db)):
         raise HTTPException(
             status_code=401, 
             detail="Incorrect password. Please try again."
+        )
+    
+    # Check if email is verified
+    if not user.email_verified:
+        raise HTTPException(
+            status_code=403,
+            detail="Please verify your email address before logging in. Check your inbox for the verification link."
         )
     
     # Check if approved
@@ -230,3 +261,124 @@ async def logout(current_user: User = Depends(get_current_user), db: Session = D
     db.commit()
     
     return {"message": "Successfully logged out"}
+
+
+@ro
+uter.get("/verify-email/{token}")
+async def verify_email(token: str, db: Session = Depends(get_db)):
+    """
+    Verify user email with token
+    
+    Args:
+        token: Verification token from email link
+    
+    Returns:
+        Success message and user info
+    """
+    from backend.utils.email_service import send_verification_success_email
+    
+    # Find user by token
+    user = db.query(User).filter(User.verification_token == token).first()
+    
+    if not user:
+        raise HTTPException(status_code=404, detail="Invalid verification token")
+    
+    # Check if already verified
+    if user.email_verified:
+        return {
+            "status": "already_verified",
+            "message": "Email already verified",
+            "user": {
+                "name": user.name,
+                "email": user.email
+            }
+        }
+    
+    # Check if token expired
+    if user.verification_token_expires and user.verification_token_expires < datetime.utcnow():
+        raise HTTPException(
+            status_code=400,
+            detail="Verification token has expired. Please request a new one."
+        )
+    
+    # Verify email
+    user.email_verified = True
+    user.verification_token = None  # Clear token after use
+    user.verification_token_expires = None
+    db.commit()
+    
+    # Send success email
+    try:
+        send_verification_success_email(user.email, user.name)
+    except Exception as e:
+        print(f"Failed to send success email: {str(e)}")
+    
+    # Log verification
+    audit = AuditLog(
+        user_id=user.id,
+        action="email_verified",
+        action_metadata={"email": user.email}
+    )
+    db.add(audit)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "Email verified successfully! Your account is now pending admin approval.",
+        "user": {
+            "name": user.name,
+            "email": user.email,
+            "approved": user.approved
+        }
+    }
+
+
+@router.post("/resend-verification")
+async def resend_verification(email: EmailStr, db: Session = Depends(get_db)):
+    """
+    Resend verification email
+    
+    Args:
+        email: User's email address
+    
+    Returns:
+        Success message
+    """
+    from backend.utils.email_service import send_verification_email
+    import secrets
+    
+    # Find user
+    user = db.query(User).filter(User.email == email).first()
+    
+    if not user:
+        # Don't reveal if email exists or not
+        return {
+            "status": "success",
+            "message": "If the email exists, a verification link has been sent."
+        }
+    
+    # Check if already verified
+    if user.email_verified:
+        raise HTTPException(status_code=400, detail="Email already verified")
+    
+    # Generate new token
+    verification_token = secrets.token_urlsafe(32)
+    token_expires = datetime.utcnow() + timedelta(hours=24)
+    
+    user.verification_token = verification_token
+    user.verification_token_expires = token_expires
+    db.commit()
+    
+    # Send email
+    try:
+        send_verification_email(user.email, user.name, verification_token)
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to send verification email. Please try again later."
+        )
+    
+    return {
+        "status": "success",
+        "message": "Verification email sent successfully. Please check your inbox."
+    }

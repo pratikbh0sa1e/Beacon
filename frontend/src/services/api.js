@@ -51,6 +51,9 @@ export const authAPI = {
   register: (userData) => api.post("/auth/register", userData),
   me: () => api.get("/auth/me"),
   logout: () => api.post("/auth/logout"),
+  verifyEmail: (token) => api.get(`/auth/verify-email/${token}`),
+  resendVerification: (email) =>
+    api.post("/auth/resend-verification", null, { params: { email } }),
 };
 
 // ============ USER ENDPOINTS ============
@@ -138,6 +141,36 @@ export const auditAPI = {
 export const chatAPI = {
   query: (question, filters) => api.post("/chat/query", { question, filters }),
   getHistory: () => api.get("/chat/history"),
+};
+
+// ============ VOICE ENDPOINTS ============
+export const voiceAPI = {
+  transcribe: (audioFile, language = null) => {
+    const formData = new FormData();
+    formData.append("audio", audioFile);
+    if (language) formData.append("language", language);
+    return api.post("/voice/transcribe", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  query: (audioFile, language = null, threadId = null) => {
+    const formData = new FormData();
+    formData.append("audio", audioFile);
+    if (language) formData.append("language", language);
+    if (threadId) formData.append("thread_id", threadId);
+    return api.post("/voice/query", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
+  queryStream: (audioFile, language = null, threadId = null) => {
+    const formData = new FormData();
+    formData.append("audio", audioFile);
+    if (language) formData.append("language", language);
+    if (threadId) formData.append("thread_id", threadId);
+    return `${API_URL}/voice/query/stream`;
+  },
+  engineInfo: () => api.get("/voice/engine-info"),
+  health: () => api.get("/voice/health"),
 };
 
 // ============ SYSTEM ENDPOINTS ============

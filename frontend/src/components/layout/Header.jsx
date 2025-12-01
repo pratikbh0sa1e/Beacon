@@ -27,19 +27,22 @@ export const Header = ({ onMenuClick }) => {
   const [unreadCount, setUnreadCount] = useState(0);
 
   useEffect(() => {
+    if (!user) return; // Don't poll if user is not logged in
+
     fetchUnreadCount();
     // Poll for new notifications every 30 seconds
     const interval = setInterval(fetchUnreadCount, 30000);
     return () => clearInterval(interval);
-  }, []);
+  }, [user]);
 
   const fetchUnreadCount = async () => {
     try {
       const response = await notificationAPI.unreadCount();
       setUnreadCount(response.data.unread_count || 0);
     } catch (error) {
-      // If endpoint doesn't exist yet, show 1 as placeholder
-      setUnreadCount(1);
+      // Silently fail - don't show misleading count
+      console.error("Failed to fetch notification count:", error);
+      setUnreadCount(0);
     }
   };
 
