@@ -73,6 +73,7 @@ class User(Base):
     institution = relationship("Institution", back_populates="users")
     audit_logs = relationship("AuditLog", back_populates="user")
     bookmarks = relationship("Bookmark", cascade="all, delete-orphan", back_populates="user")
+    chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
 
     # ✅ FIXED: Specify foreign_keys to resolve ambiguity
     uploaded_documents = relationship(
@@ -313,6 +314,40 @@ class Notification(Base):
     
     # Relationship
     user = relationship("User", foreign_keys=[user_id])
+
+
+class ChatSession(Base):
+    """Chat sessions for storing conversation history"""
+    __tablename__ = "chat_sessions"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    title = Column(String(200), nullable=False, default="New Chat")
+    thread_id = Column(String(100), nullable=False, unique=True, index=True)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationships
+    user = relationship("User", back_populates="chat_sessions")
+    messages = relationship("ChatMessage", back_populates="session", cascade="all, delete-orphan", order_by="ChatMessage.created_at")
+
+
+class ChatMessage(Base):
+    """Individual messages within chat sessions"""
+    __tablename__ = "chat_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    session_id = Column(Integer, ForeignKey("chat_sessions.id", ondelete="CASCADE"), nullable=False, index=True)
+    role = Column(String(20), nullable=False)  # 'user' or 'assistant'
+    content = Column(Text, nullable=False)
+    citations = Column(JSONB, default=list)  # Array of citation objects
+    confidence = Column(Integer, nullable=True)  # 0-100 (percentage)
+    
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationship
+    session = relationship("ChatSession", back_populates="messages")
 
 
 def get_db():

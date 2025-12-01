@@ -2,11 +2,14 @@
 from fastapi import APIRouter, HTTPException, Depends
 from pydantic import BaseModel
 from typing import Optional
+from sqlalchemy.orm import Session
+from datetime import datetime
 import os
+import uuid
 from dotenv import load_dotenv
 
 from Agent.rag_agent.react_agent import PolicyRAGAgent
-from backend.database import User
+from backend.database import User, ChatSession, ChatMessage, get_db
 from backend.routers.auth_router import get_current_user
 
 load_dotenv()
@@ -28,7 +31,8 @@ def get_agent():
 
 class ChatRequest(BaseModel):
     question: str
-    thread_id: Optional[str] = "default"
+    thread_id: Optional[str] = "default"  # Deprecated, use session_id instead
+    session_id: Optional[int] = None  # NEW: Optional session ID
 
 
 class ChatResponse(BaseModel):
@@ -36,32 +40,132 @@ class ChatResponse(BaseModel):
     citations: list
     confidence: float
     status: str
+    session_id: Optional[int] = None  # NEW: Return session ID
+    message_id: Optional[int] = None  # NEW: Return message ID
+
+
+def get_or_create_session(
+    session_id: Optional[int],
+    user_id: int,
+    db: Session
+) -> ChatSession:
+    """
+    Get existing session or create new one
+    
+    Args:
+        session_id: Optional session ID
+        user_id: Current user ID
+        db: Database session
+    
+    Returns:
+        ChatSession object
+    """
+    if session_id:
+        # Get existing session and verify ownership
+        session = db.query(ChatSession).filter(
+            ChatSession.id == session_id,
+            ChatSession.user_id == user_id
+        ).first()
+        
+        if not session:
+            raise HTTPException(
+                status_code=404,
+                detail="Session not found or you don't have access to it"
+            )
+        
+        return session
+    else:
+        # Create new session
+        thread_id = str(uuid.uuid4())
+        session = ChatSession(
+            user_id=user_id,
+            title="New Chat",
+            thread_id=thread_id
+        )
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+        return session
 
 
 @router.post("/query", response_model=ChatResponse)
 async def chat_query(
     request: ChatRequest,
-    current_user: User = Depends(get_current_user)
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ):
     """
     Ask a question to the RAG agent
     
     Args:
         question: The question to ask
-        thread_id: Optional thread ID for conversation memory
+        session_id: Optional session ID (creates new if not provided)
+        thread_id: Deprecated, use session_id instead
     
     Returns:
-        Answer with citations and confidence score
+        Answer with citations, confidence score, session_id, and message_id
     
     Requires authentication - all authenticated users can query
+    
+    NEW: Now saves all messages to database for chat history
     """
     try:
+        # Step 1: Get or create session
+        session = get_or_create_session(request.session_id, current_user.id, db)
+        
+        # Step 2: Save user message to database
+        user_message = ChatMessage(
+            session_id=session.id,
+            role="user",
+            content=request.question
+        )
+        db.add(user_message)
+        db.commit()
+        db.refresh(user_message)
+        
+        # Step 3: Query the RAG agent using session's thread_id
         rag_agent = get_agent()
-        result = rag_agent.query(request.question, request.thread_id)
+        result = rag_agent.query(request.question, session.thread_id)
         
-        return ChatResponse(**result)
+        # Step 4: Save AI response to database
+        ai_message = ChatMessage(
+            session_id=session.id,
+            role="assistant",
+            content=result["answer"],
+            citations=result.get("citations", []),
+            confidence=int(result.get("confidence", 0) * 100) if result.get("confidence", 0) <= 1 else int(result.get("confidence", 0))  # Handle both 0-1 and 0-100 formats
+        )
+        db.add(ai_message)
         
+        # Step 5: Update session timestamp
+        session.updated_at = datetime.utcnow()
+        
+        # Step 6: Auto-generate title from first user message
+        if session.title == "New Chat":
+            # Get first 50 characters of user message
+            title = request.question[:50]
+            if len(request.question) > 50:
+                title += "..."
+            session.title = title
+        
+        db.commit()
+        db.refresh(ai_message)
+        
+        # Step 7: Return response with session and message IDs
+        return ChatResponse(
+            answer=result["answer"],
+            citations=result.get("citations", []),
+            confidence=result.get("confidence", 0.0),
+            status=result.get("status", "success"),
+            session_id=session.id,
+            message_id=ai_message.id
+        )
+        
+    except HTTPException:
+        # Re-raise HTTP exceptions (like 404 for invalid session)
+        raise
     except Exception as e:
+        # Log error and return 500
         raise HTTPException(status_code=500, detail=str(e))
 
 

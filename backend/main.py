@@ -9,6 +9,7 @@ from backend.routers import (
     bookmark_router,
     approval_router,
     chat_router,
+    chat_history_router,
     audit_router,
     data_source_router,
     notification_router
@@ -57,6 +58,7 @@ app.include_router(institution_router.router, prefix="/institutions", tags=["ins
 app.include_router(document_router.router, prefix="/documents", tags=["documents"])
 app.include_router(approval_router.router, prefix="/approvals", tags=["approvals"])
 app.include_router(chat_router.router, prefix="/chat", tags=["chat"])
+app.include_router(chat_history_router.router, prefix="/chat", tags=["chat-history"])
 app.include_router(audit_router.router, prefix="/audit", tags=["audit"])
 app.include_router(data_source_router.router, prefix="/data-sources", tags=["data-sources"])
 app.include_router(notification_router.router, prefix="/notifications", tags=["notifications"])

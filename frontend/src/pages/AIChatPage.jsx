@@ -13,7 +13,8 @@ import {
   AlertCircle,
   ExternalLink,
 } from "lucide-react";
-import { chatAPI } from "../services/api";
+import { useChatStore } from "../stores/chatStore";
+import { ChatSidebar } from "../components/chat/ChatSidebar";
 import { PageHeader } from "../components/common/PageHeader";
 import { Button } from "../components/ui/button";
 import { Input } from "../components/ui/input";
@@ -135,7 +136,7 @@ const Message = ({ message, isUser, onCitationClick }) => (
       {message.confidence && (
         <div className="flex items-center gap-2 mt-2 px-2">
           <Badge variant="outline" className="text-xs">
-            Confidence: {(message.confidence * 100).toFixed(0)}%
+            Confidence: {message.confidence}%
           </Badge>
         </div>
       )}
@@ -178,17 +179,15 @@ const Message = ({ message, isUser, onCitationClick }) => (
 
 export const AIChatPage = () => {
   const navigate = useNavigate();
-  const [messages, setMessages] = useState([
-    {
-      id: 1,
-      text: "Hello! I'm the **BEACON AI Assistant**. Ask me anything about your documents, and I'll help you find the information you need.",
-      isUser: false,
-    },
-  ]);
+  const { messages, sendMessage, initialize, loading: storeLoading } = useChatStore();
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [streamingMessage, setStreamingMessage] = useState(null);
   const messagesEndRef = useRef(null);
+
+  // Initialize chat store on mount
+  useEffect(() => {
+    initialize();
+  }, []);
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -198,43 +197,19 @@ export const AIChatPage = () => {
     scrollToBottom();
   }, [messages]);
 
-  // Regular non-streaming handler (current implementation)
+  // Send message using chat store
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const userMessage = {
-      id: Date.now(),
-      text: input,
-      isUser: true,
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    const currentInput = input;
     setInput("");
     setLoading(true);
 
     try {
-      const response = await chatAPI.query(input);
-      const { answer, citations, confidence } = response.data;
-
-      const aiMessage = {
-        id: Date.now() + 1,
-        text: answer,
-        isUser: false,
-        citations: citations || [],
-        confidence: confidence || 0,
-      };
-
-      setMessages((prev) => [...prev, aiMessage]);
+      await sendMessage(currentInput);
     } catch (error) {
       console.error("Chat error:", error);
-      const errorMessage = {
-        id: Date.now() + 1,
-        text: "I apologize, but I encountered an error processing your request. Please try again.",
-        isUser: false,
-        isError: true,
-      };
-      setMessages((prev) => [...prev, errorMessage]);
-      toast.error("Failed to get AI response");
+      toast.error("Failed to send message");
     } finally {
       setLoading(false);
     }
@@ -350,8 +325,15 @@ export const AIChatPage = () => {
         icon={Bot}
       />
 
-      <Card className="glass-card border-border/50 flex-1 flex flex-col overflow-hidden">
-        <CardContent className="p-6 flex-1 flex flex-col min-h-0">
+      <div className="flex-1 flex gap-4 min-h-0">
+        {/* Sidebar */}
+        <Card className="glass-card border-border/50 w-80 flex-shrink-0 overflow-hidden">
+          <ChatSidebar />
+        </Card>
+
+        {/* Main Chat Area */}
+        <Card className="glass-card border-border/50 flex-1 flex flex-col overflow-hidden">
+          <CardContent className="p-6 flex-1 flex flex-col min-h-0">
           <div className="flex-1 overflow-y-auto min-h-0 space-y-6 mb-4 scrollbar-hide">
             <AnimatePresence>
               {messages.map((message) => (
@@ -362,16 +344,8 @@ export const AIChatPage = () => {
                   onCitationClick={handleCitationClick}
                 />
               ))}
-              {streamingMessage && (
-                <Message
-                  key={streamingMessage.id}
-                  message={streamingMessage}
-                  isUser={false}
-                  onCitationClick={handleCitationClick}
-                />
-              )}
             </AnimatePresence>
-            {loading && !streamingMessage && (
+            {loading && (
               <motion.div
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
@@ -428,6 +402,7 @@ export const AIChatPage = () => {
           </div>
         </CardContent>
       </Card>
+      </div>
     </div>
   );
 };
