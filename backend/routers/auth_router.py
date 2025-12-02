@@ -2,7 +2,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional
 from datetime import datetime, timedelta
 import bcrypt
@@ -261,6 +261,36 @@ async def logout(current_user: User = Depends(get_current_user), db: Session = D
     db.commit()
     
     return {"message": "Successfully logged out"}
+
+
+class UpdateProfileRequest(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+
+
+@router.put("/profile", response_model=UserResponse)
+async def update_profile(
+    request: UpdateProfileRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Update user profile (name only)"""
+    # Update user name
+    current_user.name = request.name
+    current_user.updated_at = datetime.utcnow()
+    
+    db.commit()
+    db.refresh(current_user)
+    
+    # Log profile update
+    audit = AuditLog(
+        user_id=current_user.id,
+        action="profile_update",
+        action_metadata={"name": request.name}
+    )
+    db.add(audit)
+    db.commit()
+    
+    return current_user
 
 
 @router.get("/verify-email/{token}")

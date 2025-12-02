@@ -105,7 +105,9 @@ export const DashboardPage = () => {
   return (
     <div className="space-y-8">
       <PageHeader
-        title={`Welcome back, ${user?.email?.split("@")[0] || "User"}!`}
+        title={`Welcome back, ${
+          user?.name || user?.email?.split("@")[0] || "User"
+        }!`}
         description="Here's what's happening with your document system today."
       />
 

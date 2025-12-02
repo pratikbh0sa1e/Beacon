@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion } from "framer-motion";
 import { User, Mail, Building2, Shield, Calendar, Save } from "lucide-react";
 import { useAuthStore } from "../stores/authStore";
+import { authAPI } from "../services/api";
 import { PageHeader } from "../components/common/PageHeader";
 import {
   Card,
@@ -23,6 +24,16 @@ export const ProfilePage = () => {
     email: user?.email || "",
   });
 
+  // Update form data when user data changes
+  useEffect(() => {
+    if (user) {
+      setFormData({
+        name: user.name || "",
+        email: user.email || "",
+      });
+    }
+  }, [user]);
+
   const getInitials = (name) => {
     if (!name) return "U";
     return name
@@ -33,10 +44,19 @@ export const ProfilePage = () => {
       .slice(0, 2);
   };
 
-  const handleSave = () => {
-    updateUser(formData);
-    setEditing(false);
-    toast.success("Profile updated successfully");
+  const handleSave = async () => {
+    try {
+      // Call API to update profile
+      const response = await authAPI.updateProfile({ name: formData.name });
+
+      // Update local state
+      updateUser(response.data);
+      setEditing(false);
+      toast.success("Profile updated successfully");
+    } catch (error) {
+      console.error("Error updating profile:", error);
+      toast.error(error.response?.data?.detail || "Failed to update profile");
+    }
   };
 
   const handleCancel = () => {
