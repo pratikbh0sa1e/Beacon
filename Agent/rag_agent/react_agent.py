@@ -100,27 +100,49 @@ class PolicyRAGAgent:
             Tool(
                 name="search_documents",
                 func=self._search_documents_wrapper,
-                description="Search across all policy documents using semantic and keyword search with role-based access control. Use this for general questions about policies. This is your primary tool for finding information. Results include approval status."
+                description=(
+                    "Search across ALL documents to find information. Use this as your PRIMARY and FIRST tool for ANY question. "
+                    "Input: just the search query as a string (e.g., 'Pranav Waikar' or 'admission policy'). "
+                    "Returns: Top 5 relevant results with document IDs, sources, and approval status. "
+                    "IMPORTANT: This tool usually provides enough information to answer the question - check results carefully before using other tools."
+                )
             ),
             Tool(
                 name="search_specific_document",
                 func=self._search_specific_document_wrapper,
-                description="Search within a specific document by ID with role-based access. Use when you know which document to search. Input: {'document_id': int, 'query': str}. Results include approval status."
+                description=(
+                    "Search WITHIN a specific document when you already know the document ID from a previous search. "
+                    "Input: {'document_id': int, 'query': str} "
+                    "Only use this if search_documents found a relevant document but you need MORE details from that specific document."
+                )
             ),
             Tool(
                 name="compare_policies",
                 func=lambda args: compare_policies(**eval(args)),
-                description="Compare multiple documents on a specific aspect. Input: {'document_ids': [int, int], 'aspect': str}"
+                description=(
+                    "Compare TWO OR MORE documents on a specific aspect. "
+                    "Input: {'document_ids': [int, int], 'aspect': str} "
+                    "Only use when user explicitly asks to COMPARE multiple documents."
+                )
             ),
             Tool(
                 name="get_document_metadata",
                 func=lambda args="": get_document_metadata() if not args or str(args).strip() in ["{}", "", "None"] else get_document_metadata(int(args)),
-                description="Get metadata about all documents in the system. Leave input empty to get all documents. Example: just call the tool without arguments."
+                description=(
+                    "Get a LIST of all available documents in the system. "
+                    "Input: leave empty or pass nothing. "
+                    "Use this ONLY when user asks 'what documents do you have' or 'list all documents'. "
+                    "DO NOT use this for searching - use search_documents instead."
+                )
             ),
             Tool(
                 name="summarize_document",
                 func=lambda args: summarize_document(**eval(args)),
-                description="Generate a summary of a document. Input: {'document_id': int, 'focus': str}"
+                description=(
+                    "Generate a SUMMARY of an entire document. "
+                    "Input: {'document_id': int, 'focus': str} "
+                    "Only use when user explicitly asks for a summary or overview of a document."
+                )
             )
         ]
         
@@ -132,7 +154,9 @@ class PolicyRAGAgent:
             tools=self.tools,
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=5,
+            max_iterations=15,  # Increased from 5 to handle complex queries
+            max_execution_time=20,  # 20 second timeout for safety
+            early_stopping_method="generate",  # Generate answer even if not fully complete
             return_intermediate_steps=True  # Enable intermediate steps for citations
         )
         
@@ -198,6 +222,10 @@ class PolicyRAGAgent:
                 input_with_context = state["query"]
             
             result = self.agent_executor.invoke({"input": input_with_context})
+            
+            # Check if agent hit iteration limit
+            if "intermediate_steps" in result and len(result["intermediate_steps"]) >= 15:
+                logger.warning(f"⚠️ Agent hit iteration limit (15) for query: {state['query'][:50]}...")
             
             state["response"] = result.get("output", "No response generated")
             state["messages"].append({
