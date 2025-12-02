@@ -341,9 +341,9 @@ export const ChatSidebar = ({ className }) => {
                       // View mode
                       <div
                         onClick={() => handleSelectSession(session.id)}
-                        className="relative overflow-hidden w-full"
+                        className="relative w-full"
                       >
-                        <div className="flex items-start gap-1.5 w-full">
+                        <div className="flex items-start gap-1.5 w-full pr-12">
                           <motion.div
                             animate={{
                               rotate: hoveredId === session.id ? 360 : 0,
@@ -361,101 +361,88 @@ export const ChatSidebar = ({ className }) => {
                               )}
                             />
                           </motion.div>
-                          <div className="flex-1 min-w-0 overflow-hidden">
-                            <div className="flex items-center gap-1 mb-0.5 w-full">
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-center gap-1 mb-0.5">
                               <p
                                 className={cn(
-                                  "text-xs font-medium transition-colors",
-                                  "overflow-hidden text-ellipsis whitespace-nowrap flex-shrink",
+                                  "text-xs font-medium transition-colors truncate",
                                   currentSessionId === session.id &&
                                     "text-primary"
                                 )}
-                                style={{
-                                  maxWidth:
-                                    hoveredId === session.id
-                                      ? "calc(100% - 65px)"
-                                      : "100%",
-                                  transition: "max-width 0.15s ease",
-                                }}
+                                title={session.title}
                               >
-                                {session.title}
+                                {session.title.length > 30
+                                  ? session.title.substring(0, 30) + "..."
+                                  : session.title}
                               </p>
-                              {/* Action buttons - always visible on hover */}
-                              <AnimatePresence>
-                                {hoveredId === session.id && (
-                                  <motion.div
-                                    initial={{
-                                      opacity: 0,
-                                      scale: 0.8,
-                                    }}
-                                    animate={{
-                                      opacity: 1,
-                                      scale: 1,
-                                    }}
-                                    exit={{ opacity: 0, scale: 0.8 }}
-                                    transition={{ duration: 0.15 }}
-                                    className="flex gap-0.5 flex-shrink-0 ml-auto"
-                                    onClick={(e) => e.stopPropagation()}
-                                  >
-                                    <motion.button
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.9 }}
-                                      className="h-5 w-5 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleStartEdit(e, session);
-                                      }}
-                                      title="Rename"
-                                    >
-                                      <Edit2 className="h-3 w-3" />
-                                    </motion.button>
-                                    <motion.button
-                                      whileHover={{ scale: 1.1 }}
-                                      whileTap={{ scale: 0.9 }}
-                                      className="h-5 w-5 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors"
-                                      onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleDeleteSession(e, session.id);
-                                      }}
-                                      title="Delete"
-                                    >
-                                      <Trash2 className="h-3 w-3" />
-                                    </motion.button>
-                                  </motion.div>
-                                )}
-                              </AnimatePresence>
                             </div>
-                            <div className="min-w-0">
-                              {session.lastMessage && (
-                                <p className="text-[10px] text-muted-foreground truncate mt-0.5 leading-tight">
-                                  {session.lastMessage.length > 35
-                                    ? session.lastMessage.substring(0, 35) +
-                                      "..."
-                                    : session.lastMessage}
-                                </p>
-                              )}
-                              <div className="flex items-center gap-1.5 mt-0.5">
-                                <p className="text-[10px] text-muted-foreground whitespace-nowrap">
-                                  {formatDate(session.updatedAt)}
-                                </p>
-                                <span className="text-[10px] text-muted-foreground">
-                                  •
-                                </span>
-                                <motion.span
-                                  className={cn(
-                                    "text-[10px] px-1 py-0.5 rounded-full transition-colors whitespace-nowrap",
-                                    currentSessionId === session.id
-                                      ? "bg-primary/20 text-primary"
-                                      : "bg-muted text-muted-foreground"
-                                  )}
-                                  whileHover={{ scale: 1.05 }}
-                                >
-                                  {session.messageCount} msgs
-                                </motion.span>
-                              </div>
+                            {session.lastMessage && (
+                              <p className="text-[10px] text-muted-foreground truncate mt-0.5 leading-tight">
+                                {session.lastMessage.length > 35
+                                  ? session.lastMessage.substring(0, 35) + "..."
+                                  : session.lastMessage}
+                              </p>
+                            )}
+                            <div className="flex items-center gap-1.5 mt-0.5">
+                              <p className="text-[10px] text-muted-foreground whitespace-nowrap">
+                                {formatDate(session.updatedAt)}
+                              </p>
+                              <span className="text-[10px] text-muted-foreground">
+                                •
+                              </span>
+                              <motion.span
+                                className={cn(
+                                  "text-[10px] px-1 py-0.5 rounded-full transition-colors whitespace-nowrap",
+                                  currentSessionId === session.id
+                                    ? "bg-primary/20 text-primary"
+                                    : "bg-muted text-muted-foreground"
+                                )}
+                                whileHover={{ scale: 1.05 }}
+                              >
+                                {session.messageCount} msgs
+                              </motion.span>
                             </div>
                           </div>
                         </div>
+                        
+                        {/* Action buttons - absolutely positioned */}
+                        <AnimatePresence>
+                          {hoveredId === session.id && (
+                            <motion.div
+                              initial={{ opacity: 0, scale: 0.8 }}
+                              animate={{ opacity: 1, scale: 1 }}
+                              exit={{ opacity: 0, scale: 0.8 }}
+                              transition={{ duration: 0.15 }}
+                              className="absolute top-2 right-2 flex gap-0.5 z-10"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                className="h-6 w-6 flex items-center justify-center rounded hover:bg-accent text-muted-foreground hover:text-foreground transition-colors bg-background/90 backdrop-blur-sm shadow-sm border border-border/50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleStartEdit(e, session);
+                                }}
+                                title="Rename"
+                              >
+                                <Edit2 className="h-3 w-3" />
+                              </motion.button>
+                              <motion.button
+                                whileHover={{ scale: 1.1 }}
+                                whileTap={{ scale: 0.9 }}
+                                className="h-6 w-6 flex items-center justify-center rounded hover:bg-destructive/10 text-muted-foreground hover:text-destructive transition-colors bg-background/90 backdrop-blur-sm shadow-sm border border-border/50"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  handleDeleteSession(e, session.id);
+                                }}
+                                title="Delete"
+                              >
+                                <Trash2 className="h-3 w-3" />
+                              </motion.button>
+                            </motion.div>
+                          )}
+                        </AnimatePresence>
                       </div>
                     )}
                   </motion.div>
