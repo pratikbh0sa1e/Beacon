@@ -7,7 +7,7 @@ from rank_bm25 import BM25Okapi
 
 from Agent.retrieval.hybrid_retriever import HybridRetriever
 from Agent.embeddings.bge_embedder import BGEEmbedder
-from Agent.vector_store.faiss_store import FAISSVectorStore
+from Agent.vector_store.pgvector_store import PGVectorStore
 from Agent.metadata.reranker import DocumentReranker
 from Agent.lazy_rag.lazy_embedder import LazyEmbedder
 
@@ -28,136 +28,180 @@ embedder = BGEEmbedder()
 retriever = HybridRetriever(vector_weight=0.7, bm25_weight=0.3)
 reranker = DocumentReranker(provider="gemini")
 lazy_embedder = LazyEmbedder()
+pgvector_store = PGVectorStore()
 
 
-def search_documents_lazy(query: str, top_k: int = 5) -> str:
+def search_documents_lazy(query: str, top_k: int = 5, user_role: Optional[str] = None, user_institution_id: Optional[int] = None) -> str:
     """
-    Lazy RAG search: Filter by metadata, rerank, then embed if needed
+    Lazy RAG search with role-based filtering using pgvector
     
     Args:
         query: The search query
         top_k: Number of results to return
+        user_role: User's role for access control
+        user_institution_id: User's institution ID
     
     Returns:
-        Formatted search results with citations
+        Formatted search results with citations including approval status
     """
-    logger.info(f"Lazy search for query: '{query}'")
+    logger.info(f"Lazy search for query: '{query}' (role={user_role}, institution={user_institution_id})")
     
     try:
-        # Step 1: Get all documents with metadata from database
-        from backend.database import SessionLocal, DocumentMetadata, Document
+        from backend.database import SessionLocal, DocumentMetadata, Document, DocumentEmbedding
         db = SessionLocal()
         
-        metadata_records = db.query(DocumentMetadata).join(Document).all()
+        # Step 1: Check if there are any unembed documents that user can access
+        # Get documents user has access to that aren't embedded yet
+        query_docs = db.query(Document, DocumentMetadata).join(
+            DocumentMetadata, Document.id == DocumentMetadata.document_id
+        ).filter(
+            DocumentMetadata.embedding_status != 'embedded',
+            DocumentMetadata.metadata_status == 'ready',  # Only embed if metadata is ready
+            Document.approval_status.in_(['approved', 'pending'])
+        )
         
-        if not metadata_records:
+        # Apply role-based filters to find which docs user can access
+        from backend.constants.roles import DEVELOPER, MOE_ADMIN, UNIVERSITY_ADMIN
+        if user_role == DEVELOPER:
+            pass  # Can access all
+        elif user_role == MOE_ADMIN:
+            query_docs = query_docs.filter(
+                Document.visibility_level.in_(['public', 'restricted', 'institution_only'])
+            )
+        elif user_role == UNIVERSITY_ADMIN:
+            from sqlalchemy import or_, and_
+            query_docs = query_docs.filter(
+                or_(
+                    Document.visibility_level == 'public',
+                    and_(
+                        Document.visibility_level.in_(['institution_only', 'restricted']),
+                        Document.institution_id == user_institution_id
+                    )
+                )
+            )
+        else:
+            from sqlalchemy import or_, and_
+            filters = [Document.visibility_level == 'public']
+            if user_institution_id:
+                filters.append(
+                    and_(
+                        Document.visibility_level == 'institution_only',
+                        Document.institution_id == user_institution_id
+                    )
+                )
+            query_docs = query_docs.filter(or_(*filters))
+        
+        unembed_docs = query_docs.all()  # Get all unembed docs user can access
+        
+        # Step 2: Rank documents by metadata relevance using BM25
+        if unembed_docs:
+            logger.info(f"Found {len(unembed_docs)} unembed documents, ranking by metadata...")
+            
+            # Build BM25 corpus from metadata
+            documents = []
+            corpus = []
+            for doc, meta in unembed_docs:
+                doc_dict = {
+                    "doc": doc,
+                    "meta": meta,
+                    "id": doc.id,
+                    "title": meta.title,
+                    "filename": doc.filename
+                }
+                documents.append(doc_dict)
+                
+                # Create searchable text from metadata
+                text_for_bm25 = f"{meta.title or ''} {meta.bm25_keywords or ''} {meta.summary or ''} {meta.department or ''}".lower()
+                corpus.append(text_for_bm25.split())
+            
+            # Rank using BM25
+            from rank_bm25 import BM25Okapi
+            bm25 = BM25Okapi(corpus)
+            query_tokens = query.lower().split()
+            bm25_scores = bm25.get_scores(query_tokens)
+            
+            # Sort by relevance score
+            ranked_indices = bm25_scores.argsort()[::-1]  # Descending order
+            ranked_docs = [documents[i] for i in ranked_indices]
+            
+            # Take top 3 most relevant documents to embed
+            top_docs_to_embed = ranked_docs[:3]
+            
+            logger.info(f"Ranked documents by metadata. Top 3 to embed: {[d['id'] for d in top_docs_to_embed]}")
+            
+            # Step 3: Lazy embed top-ranked documents
+            for doc_dict in top_docs_to_embed:
+                doc = doc_dict['doc']
+                meta = doc_dict['meta']
+                try:
+                    logger.info(f"Lazy embedding document {doc.id}: {doc.filename} (ranked by metadata)")
+                    result = lazy_embedder.embed_document(doc.id)
+                    if result['status'] == 'success':
+                        logger.info(f"✅ Embedded doc {doc.id}: {result['num_chunks']} chunks")
+                    else:
+                        logger.warning(f"Failed to embed doc {doc.id}: {result.get('message')}")
+                except Exception as e:
+                    logger.error(f"Error embedding doc {doc.id}: {str(e)}")
+        
+        # Step 4: Generate query embedding
+        import numpy as np
+        query_embedding = embedder.embed_text(query)
+        if isinstance(query_embedding, list):
+            query_embedding = np.array(query_embedding)
+        
+        # Step 5: Search pgvector with role-based filtering
+        results = pgvector_store.search(
+            query_embedding=query_embedding,
+            top_k=top_k * 2,  # Get more results for reranking
+            user_role=user_role,
+            user_institution_id=user_institution_id,
+            db=db
+        )
+        
+        if not results:
             db.close()
-            return "No documents found in the system."
+            return "No relevant documents found matching your access permissions."
         
-        logger.info(f"Found {len(metadata_records)} documents with metadata")
+        logger.info(f"PGVector returned {len(results)} results")
         
-        # Step 2: BM25 search on metadata keywords
-        documents = []
-        corpus = []
-        for meta in metadata_records:
-            doc_dict = {
-                "id": meta.document_id,
-                "title": meta.title,
-                "department": meta.department,
-                "document_type": meta.document_type,
-                "summary": meta.summary,
-                "keywords": meta.keywords or [],
-                "embedding_status": meta.embedding_status,
-                "filename": meta.document.filename,
-                "text": meta.document.extracted_text
+        # Step 6: Get document metadata for results
+        doc_ids = list(set([r['document_id'] for r in results]))
+        doc_metadata = db.query(Document, DocumentMetadata).join(
+            DocumentMetadata, Document.id == DocumentMetadata.document_id
+        ).filter(Document.id.in_(doc_ids)).all()
+        
+        doc_info_map = {}
+        for doc, meta in doc_metadata:
+            doc_info_map[doc.id] = {
+                "title": meta.title if meta else doc.filename,
+                "filename": doc.filename,
+                "approval_status": doc.approval_status,
+                "visibility_level": doc.visibility_level
             }
-            documents.append(doc_dict)
-            
-            # Create corpus for BM25
-            text_for_bm25 = f"{meta.title or ''} {meta.bm25_keywords or ''} {meta.summary or ''}".lower()
-            corpus.append(text_for_bm25.split())
         
-        # BM25 search
-        bm25 = BM25Okapi(corpus)
-        query_tokens = query.lower().split()
-        bm25_scores = bm25.get_scores(query_tokens)
+        # Step 7: Enhance results with document info
+        enhanced_results = []
+        for result in results:
+            doc_id = result['document_id']
+            if doc_id in doc_info_map:
+                result.update(doc_info_map[doc_id])
+                enhanced_results.append(result)
         
-        # Get top 20 candidates
-        top_indices = bm25_scores.argsort()[-20:][::-1]
-        candidates = [documents[i] for i in top_indices]
-        
-        logger.info(f"BM25 filtered to {len(candidates)} candidates")
-        
-        # Step 3: Rerank with LLM
-        rerank_k = min(5, len(candidates))  # Don't ask for more than we have
-        reranked_docs = reranker.rerank(query, candidates, top_k=rerank_k)
-        logger.info(f"Reranked to top {len(reranked_docs)} documents")
-        
-        # Step 4: Check embedding status and embed if needed
-        docs_to_embed = []
-        for doc in reranked_docs:
-            if doc['embedding_status'] != 'embedded':
-                docs_to_embed.append(doc)
-        
-        if docs_to_embed:
-            logger.info(f"Need to embed {len(docs_to_embed)} documents")
-            
-            # Embed documents
-            embed_input = [
-                {"id": doc['id'], "text": doc['text'], "filename": doc['filename']}
-                for doc in docs_to_embed
-            ]
-            embed_results = lazy_embedder.embed_documents_batch(embed_input)
-            
-            # Update embedding status in database
-            for result in embed_results:
-                if result['status'] == 'success':
-                    meta = db.query(DocumentMetadata).filter(
-                        DocumentMetadata.document_id == result['doc_id']
-                    ).first()
-                    if meta:
-                        meta.embedding_status = 'embedded'
-            db.commit()
-        
-        # Step 5: Perform hybrid search on embedded documents
-        all_results = []
-        for doc in reranked_docs:
-            index_path = f"Agent/vector_store/documents/{doc['id']}/faiss_index"
-            
-            if not os.path.exists(f"{index_path}.index"):
-                logger.warning(f"Index not found for doc {doc['id']} after embedding attempt")
-                continue
-            
-            # Load vector store
-            vector_store = FAISSVectorStore(index_path=index_path)
-            
-            # Perform hybrid search
-            results = retriever.retrieve(query, vector_store, embedder, top_k=3)
-            
-            # Add document info to results
-            for result in results:
-                result["document_id"] = doc['id']
-                result["document_title"] = doc['title']
-                all_results.append(result)
+        # Take top_k after enhancement
+        top_results = enhanced_results[:top_k]
         
         db.close()
         
-        if not all_results:
-            return "No relevant information found."
-        
-        # Sort by score and take top_k
-        all_results.sort(key=lambda x: x["score"], reverse=True)
-        top_results = all_results[:top_k]
-        
-        # Format results
+        # Step 8: Format results with approval status
         formatted = f"Found {len(top_results)} relevant results:\n\n"
         for i, result in enumerate(top_results, 1):
-            metadata = result["metadata"]
-            formatted += f"**Result {i}** (Confidence: {result['score']:.2%})\n"
-            formatted += f"Source: {metadata.get('filename', 'Unknown')}\n"
+            approval_badge = "✅ Approved" if result['approval_status'] == 'approved' else "⏳ Pending Approval"
+            formatted += f"**Result {i}** (Confidence: {result['score']:.2%}) [{approval_badge}]\n"
+            formatted += f"Source: {result.get('filename', 'Unknown')}\n"
             formatted += f"Document ID: {result['document_id']}\n"
-            formatted += f"Document: {result.get('document_title', 'Unknown')}\n"
-            formatted += f"Chunk: {metadata.get('chunk_index', 'N/A')}\n"
+            formatted += f"Document: {result.get('title', 'Unknown')}\n"
+            formatted += f"Approval Status: {result['approval_status']}\n"
+            formatted += f"Visibility: {result['visibility_level']}\n"
             formatted += f"Text: {result['text'][:300]}...\n\n"
         
         logger.info(f"Returned {len(top_results)} results")
@@ -168,75 +212,124 @@ def search_documents_lazy(query: str, top_k: int = 5) -> str:
         return f"Error searching documents: {str(e)}"
 
 
-def search_specific_document_lazy(document_id: int, query: str, top_k: int = 5) -> str:
+def search_specific_document_lazy(document_id: int, query: str, top_k: int = 5, user_role: Optional[str] = None, user_institution_id: Optional[int] = None) -> str:
     """
-    Search within a specific document (with lazy embedding)
+    Search within a specific document using pgvector with role-based access
     
     Args:
         document_id: The document ID to search in
         query: The search query
         top_k: Number of results to return
+        user_role: User's role for access control
+        user_institution_id: User's institution ID
     
     Returns:
-        Formatted search results from the specific document
+        Formatted search results from the specific document with approval status
     """
-    logger.info(f"Lazy search in doc {document_id}: '{query}'")
+    logger.info(f"Lazy search in doc {document_id}: '{query}' (role={user_role})")
     
     try:
-        from backend.database import SessionLocal, DocumentMetadata, Document
+        from backend.database import SessionLocal, DocumentMetadata, Document, DocumentEmbedding
         db = SessionLocal()
         
-        # Get document
+        # Get document and check access
         doc = db.query(Document).filter(Document.id == document_id).first()
         if not doc:
             db.close()
             return f"Document {document_id} not found."
         
-        # Get metadata
+        # Check if user has access to this document
+        from Agent.vector_store.pgvector_store import PGVectorStore
+        temp_store = PGVectorStore()
+        filters = temp_store._build_role_filters(user_role, user_institution_id)
+        
+        # Verify access
+        access_query = db.query(Document).filter(Document.id == document_id)
+        if filters is not None:
+            # Apply same filters to document table
+            if user_role == "moe_admin":
+                access_query = access_query.filter(
+                    Document.visibility_level.in_(['public', 'restricted', 'institution_only'])
+                )
+            elif user_role == "university_admin":
+                from sqlalchemy import or_, and_
+                access_query = access_query.filter(
+                    or_(
+                        Document.visibility_level == 'public',
+                        and_(
+                            Document.visibility_level.in_(['institution_only', 'restricted']),
+                            Document.institution_id == user_institution_id
+                        )
+                    )
+                )
+            else:
+                from sqlalchemy import or_, and_
+                access_filters = [Document.visibility_level == 'public']
+                if user_institution_id:
+                    access_filters.append(
+                        and_(
+                            Document.visibility_level == 'institution_only',
+                            Document.institution_id == user_institution_id
+                        )
+                    )
+                access_query = access_query.filter(or_(*access_filters))
+        
+        if not access_query.first():
+            db.close()
+            return f"Access denied: You don't have permission to access document {document_id}."
+        
+        # Check if embeddings exist in pgvector
+        embedding_count = db.query(DocumentEmbedding).filter(
+            DocumentEmbedding.document_id == document_id
+        ).count()
+        
+        if embedding_count == 0:
+            logger.info(f"Document {document_id} not embedded in pgvector, embedding now...")
+            # Trigger lazy embedding (will be implemented in lazy_embedder update)
+            db.close()
+            return f"Document {document_id} is being embedded. Please try again in a moment."
+        
+        # Generate query embedding
+        import numpy as np
+        query_embedding = embedder.embed_text(query)
+        if isinstance(query_embedding, list):
+            query_embedding = np.array(query_embedding)
+        
+        # Search only this document's embeddings
+        results = db.query(DocumentEmbedding).filter(
+            DocumentEmbedding.document_id == document_id
+        ).order_by(
+            DocumentEmbedding.embedding.cosine_distance(query_embedding.tolist())
+        ).limit(top_k).all()
+        
+        if not results:
+            db.close()
+            return f"No relevant information found in document {document_id}."
+        
+        # Get document metadata
         metadata = db.query(DocumentMetadata).filter(
             DocumentMetadata.document_id == document_id
         ).first()
         
-        # Check if embedded
-        if not metadata or metadata.embedding_status != 'embedded':
-            logger.info(f"Document {document_id} not embedded, embedding now...")
-            
-            # Embed document
-            result = lazy_embedder.embed_document(
-                doc_id=document_id,
-                text=doc.extracted_text,
-                filename=doc.filename
-            )
-            
-            if result['status'] == 'success' and metadata:
-                metadata.embedding_status = 'embedded'
-                db.commit()
+        doc_title = metadata.title if metadata else doc.filename
+        approval_status = doc.approval_status
         
         db.close()
         
-        # Now search
-        index_path = f"Agent/vector_store/documents/{document_id}/faiss_index"
-        
-        if not os.path.exists(f"{index_path}.index"):
-            return f"Document {document_id} could not be embedded."
-        
-        # Load vector store
-        vector_store = FAISSVectorStore(index_path=index_path)
-        
-        # Perform hybrid search
-        results = retriever.retrieve(query, vector_store, embedder, top_k=top_k)
-        
-        if not results:
-            return f"No relevant information found in document {document_id}."
-        
         # Format results
-        formatted = f"Found {len(results)} results in Document {document_id}:\n\n"
+        approval_badge = "✅ Approved" if approval_status == 'approved' else "⏳ Pending Approval"
+        formatted = f"Found {len(results)} results in Document {document_id} [{approval_badge}]:\n\n"
         for i, result in enumerate(results, 1):
-            metadata = result["metadata"]
-            formatted += f"**Result {i}** (Confidence: {result['score']:.2%})\n"
-            formatted += f"Source: {metadata.get('filename', 'Unknown')}\n"
-            formatted += f"Chunk: {metadata.get('chunk_index', 'N/A')}\n"
-            formatted += f"Text: {result['text'][:300]}...\n\n"
+            import numpy as np
+            distance = np.linalg.norm(query_embedding - np.array(result.embedding))
+            score = 1.0 / (1.0 + distance)
+            
+            formatted += f"**Result {i}** (Confidence: {score:.2%})\n"
+            formatted += f"Source: {doc.filename}\n"
+            formatted += f"Document: {doc_title}\n"
+            formatted += f"Approval Status: {approval_status}\n"
+            formatted += f"Chunk: {result.chunk_index}\n"
+            formatted += f"Text: {result.chunk_text[:300]}...\n\n"
         
         logger.info(f"Returned {len(results)} results from doc {document_id}")
         return formatted

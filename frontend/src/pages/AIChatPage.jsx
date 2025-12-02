@@ -40,11 +40,10 @@ const Message = ({ message, isUser, onCitationClick }) => (
     )}
     <div className={`max-w-[80%] ${isUser ? "order-first" : ""}`}>
       <div
-        className={`rounded-2xl px-4 py-3 ${
-          isUser
+        className={`rounded-2xl px-4 py-3 ${isUser
             ? "bg-primary text-primary-foreground"
             : "glass-card border-border/50"
-        }`}
+          }`}
       >
         {isUser ? (
           <p className="text-sm leading-relaxed whitespace-pre-wrap">
@@ -159,12 +158,24 @@ const Message = ({ message, isUser, onCitationClick }) => (
               <div className="flex items-start gap-2">
                 <FileText className="h-4 w-4 text-primary flex-shrink-0 mt-0.5" />
                 <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium truncate">
-                    {citation.source}
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Page {citation.page_number}
-                  </p>
+                  <div className="flex items-center gap-2">
+                    <p className="text-sm font-medium truncate">
+                      {citation.source}
+                    </p>
+                    {citation.approval_status && (
+                      <Badge
+                        variant={citation.approval_status === 'approved' ? 'default' : 'secondary'}
+                        className="text-xs"
+                      >
+                        {citation.approval_status === 'approved' ? '✅ Approved' : '⏳ Pending'}
+                      </Badge>
+                    )}
+                  </div>
+                  {citation.page_number && (
+                    <p className="text-xs text-muted-foreground">
+                      Page {citation.page_number}
+                    </p>
+                  )}
                 </div>
                 <ExternalLink className="h-3 w-3 text-muted-foreground flex-shrink-0 mt-0.5" />
               </div>

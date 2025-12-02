@@ -91,17 +91,21 @@ class PolicyRAGAgent:
             convert_system_message_to_human=True
         )
         
-        # Define tools (using lazy search)
+        # User context for role-based access (will be set per query)
+        self.current_user_role = None
+        self.current_user_institution_id = None
+        
+        # Define tools (using lazy search with role-based access)
         self.tools = [
             Tool(
                 name="search_documents",
-                func=search_documents_lazy,
-                description="Search across all policy documents using semantic and keyword search with lazy embedding. Use this for general questions about policies. This is your primary tool for finding information."
+                func=self._search_documents_wrapper,
+                description="Search across all policy documents using semantic and keyword search with role-based access control. Use this for general questions about policies. This is your primary tool for finding information. Results include approval status."
             ),
             Tool(
                 name="search_specific_document",
-                func=lambda args: search_specific_document_lazy(**eval(args)),
-                description="Search within a specific document by ID with lazy embedding. Use when you know which document to search. Input: {'document_id': int, 'query': str}"
+                func=self._search_specific_document_wrapper,
+                description="Search within a specific document by ID with role-based access. Use when you know which document to search. Input: {'document_id': int, 'query': str}. Results include approval status."
             ),
             Tool(
                 name="compare_policies",
@@ -137,6 +141,24 @@ class PolicyRAGAgent:
         self.graph = self._create_graph()
         
         logger.info("PolicyRAGAgent initialized successfully")
+    
+    def _search_documents_wrapper(self, query: str) -> str:
+        """Wrapper to inject user context into search_documents_lazy"""
+        return search_documents_lazy(
+            query=query,
+            user_role=self.current_user_role,
+            user_institution_id=self.current_user_institution_id
+        )
+    
+    def _search_specific_document_wrapper(self, args: str) -> str:
+        """Wrapper to inject user context into search_specific_document_lazy"""
+        parsed_args = eval(args)
+        return search_specific_document_lazy(
+            document_id=parsed_args['document_id'],
+            query=parsed_args['query'],
+            user_role=self.current_user_role,
+            user_institution_id=self.current_user_institution_id
+        )
     
     def _create_graph(self) -> StateGraph:
         """Create the LangGraph workflow"""
@@ -190,7 +212,7 @@ class PolicyRAGAgent:
                 for action, observation in result["intermediate_steps"]:
                     logger.debug(f"Tool: {action.tool}, Observation length: {len(str(observation))}")
                     
-                    # Extract document IDs and sources from tool outputs
+                    # Extract document IDs, sources, and approval status from tool outputs
                     observation_str = str(observation)
                     if "Document ID:" in observation_str:
                         lines = observation_str.split("\n")
@@ -198,21 +220,25 @@ class PolicyRAGAgent:
                             if "Document ID:" in line:
                                 doc_id = line.split("Document ID:")[1].strip()
                                 source = "Unknown"
-                                # Look for source filename
-                                for j in range(max(0, i-3), min(len(lines), i+3)):
+                                approval_status = "unknown"
+                                
+                                # Look for source filename and approval status in nearby lines
+                                for j in range(max(0, i-5), min(len(lines), i+5)):
                                     if "Source:" in lines[j]:
                                         source = lines[j].split("Source:")[1].strip()
-                                        break
+                                    if "Approval Status:" in lines[j]:
+                                        approval_status = lines[j].split("Approval Status:")[1].strip()
                                 
                                 citation = {
                                     "document_id": doc_id,
                                     "source": source,
+                                    "approval_status": approval_status,
                                     "tool": action.tool
                                 }
                                 # Avoid duplicates
                                 if not any(c["document_id"] == doc_id and c["source"] == source for c in citations):
                                     citations.append(citation)
-                                    logger.info(f"Added citation: Doc {doc_id} - {source}")
+                                    logger.info(f"Added citation: Doc {doc_id} - {source} (Status: {approval_status})")
             else:
                 logger.warning("No intermediate_steps found in result")
             
@@ -243,31 +269,62 @@ class PolicyRAGAgent:
         
         return state
     
-    def query(self, question: str, thread_id: str = "default") -> dict:
+    def query(self, question: str, thread_id: str = "default", user_role: str = None, user_institution_id: int = None) -> dict:
         """
-        Query the agent
+        Query the agent with user context for role-based access
         
         Args:
             question: User question
             thread_id: Thread ID for conversation memory
+            user_role: User's role for access control
+            user_institution_id: User's institution ID
         
         Returns:
             Response dict with answer, citations, and confidence
         """
-        logger.info(f"Query received: '{question}'")
+        logger.info(f"Query received: '{question}' (role={user_role}, institution={user_institution_id})")
         
-        initial_state = {
-            "messages": [{"role": "user", "content": question}],
-            "query": question,
-            "response": "",
-            "citations": [],
-            "confidence": 0.0
-        }
+        # Set user context for this query
+        self.current_user_role = user_role
+        self.current_user_institution_id = user_institution_id
         
         config = {"configurable": {"thread_id": thread_id}}
         
         try:
-            result = self.graph.invoke(initial_state, config)
+            # Get current state from memory (if exists)
+            current_state = None
+            try:
+                # Try to get the last state from checkpointer using get_tuple
+                checkpoint_tuple = self.memory.get_tuple(config)
+                if checkpoint_tuple and checkpoint_tuple.checkpoint:
+                    # Extract the state values from the checkpoint
+                    current_state = checkpoint_tuple.checkpoint.get("channel_values", {})
+                    if current_state and "messages" in current_state:
+                        logger.info(f"Loaded previous state with {len(current_state.get('messages', []))} messages")
+            except Exception as e:
+                logger.info(f"No previous state found, starting fresh: {e}")
+            
+            # Build new state by appending to existing messages
+            if current_state and "messages" in current_state:
+                # Append new user message to existing conversation
+                new_state = {
+                    "messages": current_state["messages"] + [{"role": "user", "content": question}],
+                    "query": question,
+                    "response": "",
+                    "citations": [],
+                    "confidence": 0.0
+                }
+            else:
+                # First message in conversation
+                new_state = {
+                    "messages": [{"role": "user", "content": question}],
+                    "query": question,
+                    "response": "",
+                    "citations": [],
+                    "confidence": 0.0
+                }
+            
+            result = self.graph.invoke(new_state, config)
             
             return {
                 "answer": result["response"],
@@ -285,7 +342,7 @@ class PolicyRAGAgent:
                 "status": "error"
             }
     
-    async def query_stream(self, question: str, thread_id: str = "default") -> AsyncGenerator[dict, None]:
+    async def query_stream(self, question: str, thread_id: str = "default", user_role: str = None, user_institution_id: int = None) -> AsyncGenerator[dict, None]:
         """
         Query the agent with streaming response
         
@@ -306,7 +363,7 @@ class PolicyRAGAgent:
         try:
             # Use the query method which properly uses the graph with memory
             # The graph.invoke() with thread_id config enables conversation memory via MemorySaver
-            result = await asyncio.to_thread(self.query, question, thread_id)
+            result = await asyncio.to_thread(self.query, question, thread_id, user_role, user_institution_id)
             
             # Get the answer
             answer = result.get("answer", "")

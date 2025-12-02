@@ -93,7 +93,7 @@ def get_or_create_session(
         return session
 
 
-async def generate_stream(question: str, thread_id: str) -> AsyncGenerator[str, None]:
+async def generate_stream(question: str, thread_id: str, user_role: str = None, user_institution_id: int = None) -> AsyncGenerator[str, None]:
     """
     Generate SSE stream for chat response
     
@@ -105,8 +105,8 @@ async def generate_stream(question: str, thread_id: str) -> AsyncGenerator[str, 
     try:
         rag_agent = get_agent()
         
-        # Stream the response
-        async for chunk in rag_agent.query_stream(question, thread_id):
+        # Stream the response with user context
+        async for chunk in rag_agent.query_stream(question, thread_id, user_role, user_institution_id):
             event_type = chunk.get("type", "content")
             
             if event_type == "content":
@@ -159,7 +159,10 @@ async def generate_stream(question: str, thread_id: str) -> AsyncGenerator[str, 
 
 
 @router.post("/query/stream")
-async def chat_query_stream(request: ChatRequest):
+async def chat_query_stream(
+    request: ChatRequest,
+    current_user: User = Depends(get_current_user)
+):
     """
     Ask a question to the RAG agent with streaming response (SSE)
     
@@ -170,12 +173,19 @@ async def chat_query_stream(request: ChatRequest):
     Returns:
         Server-Sent Events stream with:
         - content: Token chunks as they're generated
-        - citation: Citations as they're discovered
+        - citation: Citations as they're discovered (with approval status)
         - metadata: Final confidence and status
         - done: Stream completion signal
+    
+    Requires authentication - applies role-based access control
     """
     return StreamingResponse(
-        generate_stream(request.question, request.thread_id),
+        generate_stream(
+            request.question, 
+            request.thread_id,
+            current_user.role,
+            current_user.institution_id
+        ),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache",
@@ -220,9 +230,15 @@ async def chat_query(
         db.commit()
         db.refresh(user_message)
         
-        # Step 3: Query the RAG agent using session's thread_id
+        # Step 3: Query the RAG agent using session's thread_id with user context
         rag_agent = get_agent()
-        result = rag_agent.query(request.question, session.thread_id)
+        # Pass user context to agent for role-based filtering
+        result = rag_agent.query(
+            request.question, 
+            session.thread_id,
+            user_role=current_user.role,
+            user_institution_id=current_user.institution_id
+        )
         
         # Step 4: Save AI response to database
         ai_message = ChatMessage(

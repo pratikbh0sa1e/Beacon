@@ -65,6 +65,20 @@ def extract_text_from_pptx(file_path: str) -> str:
     return "\n\n".join(text_parts).strip()
 
 
+def extract_text_from_txt(file_path: str) -> str:
+    """Extract text from plain text file"""
+    try:
+        # Try UTF-8 first (most common)
+        with open(file_path, 'r', encoding='utf-8') as f:
+            return f.read().strip()
+    except UnicodeDecodeError:
+        # Fallback to latin-1 if UTF-8 fails
+        try:
+            with open(file_path, 'r', encoding='latin-1') as f:
+                return f.read().strip()
+        except Exception as e:
+            raise ValueError(f"Failed to read text file: {str(e)}")
+
 def extract_text(file_path: str, file_type: str) -> str:
     """Main extraction function"""
     if file_type == "pdf":
@@ -73,6 +87,8 @@ def extract_text(file_path: str, file_type: str) -> str:
         return extract_text_from_docx(file_path)
     elif file_type == "pptx":
         return extract_text_from_pptx(file_path)
+    elif file_type == "txt":
+        return extract_text_from_txt(file_path)
     elif file_type in ["jpeg", "jpg", "png"]:
         return extract_text_from_image(file_path)
     else:

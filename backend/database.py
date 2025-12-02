@@ -1,7 +1,8 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean, JSON
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean, JSON, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from pgvector.sqlalchemy import Vector
 from datetime import datetime
 import os
 from dotenv import load_dotenv
@@ -353,6 +354,36 @@ class ChatMessage(Base):
     
     # Relationship
     session = relationship("ChatSession", back_populates="messages")
+
+
+class DocumentEmbedding(Base):
+    """Vector embeddings stored in pgvector for centralized RAG access"""
+    __tablename__ = "document_embeddings"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    chunk_index = Column(Integer, nullable=False)
+    chunk_text = Column(Text, nullable=False)
+    embedding = Column(Vector(1024), nullable=False)  # BGE-large-en-v1.5 produces 1024-dim vectors
+    
+    # Denormalized fields for efficient filtering (copied from Document table)
+    visibility_level = Column(String(50), nullable=False, index=True)
+    institution_id = Column(Integer, nullable=True, index=True)
+    approval_status = Column(String(50), nullable=False, index=True)
+    
+    # Metadata for each chunk (renamed to avoid SQLAlchemy conflict)
+    chunk_metadata = Column(JSONB, nullable=True)  # Stores filename, page_number, etc.
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Indexes for efficient querying
+    __table_args__ = (
+        Index('idx_doc_chunk', 'document_id', 'chunk_index'),
+        Index('idx_visibility_institution', 'visibility_level', 'institution_id'),
+        Index('idx_approval_status', 'approval_status'),
+    )
 
 
 def get_db():

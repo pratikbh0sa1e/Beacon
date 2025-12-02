@@ -428,7 +428,7 @@ async def upload_documents(
         db.add(doc_metadata)
         db.commit()
 
-        # 7. Background Task
+        # 7. Background Task: Extract metadata (which will then trigger embedding)
         if background_tasks:
             from backend.database import SessionLocal
             bg_db = SessionLocal()
