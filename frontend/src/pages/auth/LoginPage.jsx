@@ -31,13 +31,14 @@ export const LoginPage = () => {
 
     try {
       const response = await authAPI.login({ email, password });
-      const { access_token } = response.data;
-      const decoded = decodeToken(access_token);
+      const { access_token, user } = response.data;
 
-      setAuth(access_token, decoded);
+      // Use the user object from response, not decoded token
+      // The user object has all fields including name
+      setAuth(access_token, user);
       toast.success("Login successful!");
 
-      if (!decoded.approved) {
+      if (!user.approved) {
         navigate("/pending-approval");
       } else {
         navigate("/");

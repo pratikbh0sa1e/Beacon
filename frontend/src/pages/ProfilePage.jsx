@@ -87,13 +87,11 @@ export const ProfilePage = () => {
               <div className="flex flex-col items-center text-center space-y-4">
                 <Avatar className="h-24 w-24 border-4 border-primary/50">
                   <AvatarFallback className="bg-primary/10 text-primary text-2xl">
-                    {getInitials(user?.name || user?.email)}
+                    {getInitials(user?.name || "User")}
                   </AvatarFallback>
                 </Avatar>
                 <div>
-                  <h3 className="text-xl font-bold">
-                    {user?.name || user?.email?.split("@")[0]}
-                  </h3>
+                  <h3 className="text-xl font-bold">{user?.name || "User"}</h3>
                   <p className="text-sm text-muted-foreground">{user?.email}</p>
                 </div>
                 <Badge variant="outline" className="text-sm">

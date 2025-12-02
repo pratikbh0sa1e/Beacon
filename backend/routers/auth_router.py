@@ -310,13 +310,16 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.verification_token == token).first()
     
     if not user:
-        raise HTTPException(status_code=404, detail="Invalid verification token")
+        raise HTTPException(
+            status_code=404, 
+            detail="Invalid verification token. The link may have expired or already been used."
+        )
     
     # Check if already verified
     if user.email_verified:
         return {
             "status": "already_verified",
-            "message": "Email already verified",
+            "message": "Email already verified! You can now log in.",
             "user": {
                 "name": user.name,
                 "email": user.email
@@ -332,8 +335,10 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     
     # Verify email
     user.email_verified = True
-    user.verification_token = None  # Clear token after use
-    user.verification_token_expires = None
+    # DON'T clear token immediately - keep it for grace period to handle page refreshes
+    # Token will be cleared when user logs in or after expiry
+    # user.verification_token = None  # Commented out - keep token for grace period
+    # user.verification_token_expires = None  # Keep expiry as is
     db.commit()
     
     # Send success email

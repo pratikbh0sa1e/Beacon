@@ -62,9 +62,7 @@ export const Header = ({ onMenuClick }) => {
   };
 
   const getDisplayName = () => {
-    if (user?.name) return user.name;
-    if (user?.email) return user.email.split("@")[0];
-    return "User";
+    return user?.name || "User";
   };
 
   return (
@@ -145,7 +143,7 @@ export const Header = ({ onMenuClick }) => {
                     {getInitials(user?.name || user?.email)}
                   </AvatarFallback>
                 </Avatar>
-                <div className="hidden md:flex flex-col items-start">
+                <div className="hidden md:flex flex-col items-end">
                   <span className="text-sm font-medium truncate max-w-[120px]">
                     {getDisplayName()}
                   </span>

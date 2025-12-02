@@ -105,9 +105,7 @@ export const DashboardPage = () => {
   return (
     <div className="space-y-8">
       <PageHeader
-        title={`Welcome back, ${
-          user?.name || user?.email?.split("@")[0] || "User"
-        }!`}
+        title={`Welcome back, ${user?.name || "User"}!`}
         description="Here's what's happening with your document system today."
       />
 
@@ -145,9 +143,9 @@ export const DashboardPage = () => {
         )}
         <StatCard
           title="Documents Uploaded"
-          value="24"
+          value={stats.documents}
           icon={Upload}
-          trend="This month"
+          trend="Total documents"
           color="success"
           onClick={() => handleNavigate("/upload")}
         />

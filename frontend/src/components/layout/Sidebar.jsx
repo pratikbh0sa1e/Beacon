@@ -13,6 +13,7 @@ import {
   Settings,
   X,
   Star,
+  CheckCircle,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -31,6 +32,12 @@ const menuItems = [
   },
   { icon: MessageSquare, label: "AI Assistant", path: "/ai-chat", roles: [] },
   {
+    icon: CheckCircle,
+    label: "Document Approvals",
+    path: "/approvals",
+    roles: ["developer", "moe_admin", "university_admin"],
+  },
+  {
     icon: Users,
     label: "User Management",
     path: "/admin/users",
@@ -38,7 +45,7 @@ const menuItems = [
   },
   {
     icon: Shield,
-    label: "Approvals",
+    label: "User Approvals",
     path: "/admin/approvals",
     roles: ADMIN_ROLES,
   },

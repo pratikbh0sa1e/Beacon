@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
-import { motion } from "framer-motion";
 import {
   ArrowLeft,
   Download,
@@ -10,6 +9,9 @@ import {
   Building2,
   Shield,
   Star,
+  Send,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react";
 import { documentAPI, bookmarkAPI } from "../../services/api";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -24,14 +26,18 @@ import { Badge } from "../../components/ui/badge";
 import { Separator } from "../../components/ui/separator";
 import { formatDateTime } from "../../utils/dateFormat";
 import { toast } from "sonner";
+import { useAuthStore } from "../../stores/authStore";
+import { SecureDocumentViewer } from "../../components/documents/SecureDocumentViewer";
 
 export const DocumentDetailPage = () => {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuthStore();
   // const [document, setDocument] = useState(null);
   const [docData, setDocData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [isBookmarked, setIsBookmarked] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -106,11 +112,41 @@ export const DocumentDetailPage = () => {
     }
   };
 
+  const handleSubmitForReview = async () => {
+    setSubmitting(true);
+    try {
+      await documentAPI.submitForReview(id);
+      toast.success(
+        "Document submitted for MoE review successfully! MoE administrators have been notified."
+      );
+      fetchDocument(); // Refresh to show updated status
+    } catch (error) {
+      console.error("Submit error:", error);
+      toast.error(error.response?.data?.detail || "Failed to submit document");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePublish = async () => {
+    setSubmitting(true);
+    try {
+      await documentAPI.approveDocument(id);
+      toast.success("Document published successfully!");
+      fetchDocument(); // Refresh to show updated status
+    } catch (error) {
+      console.error("Publish error:", error);
+      toast.error(error.response?.data?.detail || "Failed to publish document");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
   if (loading) {
     return <LoadingSpinner text="Loading document..." />;
   }
 
-  if (!document) {
+  if (!docData) {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Document not found</p>
@@ -137,6 +173,22 @@ export const DocumentDetailPage = () => {
           <div className="flex items-center gap-2 mt-2">
             <Badge>{docData.category}</Badge>
             <Badge variant="outline">{docData.visibility}</Badge>
+            {/* Status Badge */}
+            <Badge
+              className={
+                docData.approval_status === "approved"
+                  ? "bg-green-600"
+                  : docData.approval_status === "pending"
+                  ? "bg-yellow-600"
+                  : docData.approval_status === "rejected"
+                  ? "bg-red-600"
+                  : docData.approval_status === "draft"
+                  ? "bg-gray-600"
+                  : "bg-blue-600"
+              }
+            >
+              {docData.approval_status?.replace("_", " ").toUpperCase()}
+            </Badge>
           </div>
         </div>
 
@@ -153,6 +205,39 @@ export const DocumentDetailPage = () => {
         >
           <Star className={`h-5 w-5 ${isBookmarked ? "fill-current" : ""}`} />
         </Button>
+
+        {/* ✅ Publish Button for MoE Admin - Direct publish without approval */}
+        {(user?.role === "moe_admin" || user?.role === "developer") &&
+          docData.approval_status === "draft" && (
+            <Button
+              onClick={handlePublish}
+              disabled={submitting}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              <CheckCircle className="h-4 w-4 mr-2" />
+              {submitting ? "Publishing..." : "Publish Document"}
+            </Button>
+          )}
+
+        {/* ✅ Submit for Review Button - Only for University users (NOT MoE) */}
+        {/* MoE Admin and Developer don't need approval - their uploads are auto-approved */}
+        {user?.role !== "moe_admin" &&
+          user?.role !== "developer" &&
+          ((user?.role === "university_admin" &&
+            user?.institution_id === docData.institution_id) ||
+            user?.id === docData.uploader?.id) &&
+          docData.approval_status !== "pending" &&
+          docData.approval_status !== "approved" &&
+          docData.approval_status !== "under_review" && (
+            <Button
+              onClick={handleSubmitForReview}
+              disabled={submitting}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Send className="h-4 w-4 mr-2" />
+              {submitting ? "Submitting..." : "Submit for MoE Review"}
+            </Button>
+          )}
 
         {/* ✅ Show Download Button only if allowed */}
         {docData.download_allowed && (
@@ -171,6 +256,27 @@ export const DocumentDetailPage = () => {
           </CardTitle>
         </CardHeader>
         <CardContent className="space-y-6">
+          {/* ⚠️ Rejection/Changes Requested Notice */}
+          {(docData.approval_status === "rejected" ||
+            docData.approval_status === "changes_requested") &&
+            docData.rejection_reason && (
+              <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4">
+                <div className="flex items-start gap-3">
+                  <AlertCircle className="h-5 w-5 text-red-600 dark:text-red-400 mt-0.5" />
+                  <div>
+                    <h4 className="font-semibold text-red-900 dark:text-red-100 mb-1">
+                      {docData.approval_status === "rejected"
+                        ? "Document Rejected"
+                        : "Changes Requested"}
+                    </h4>
+                    <p className="text-sm text-red-800 dark:text-red-200">
+                      {docData.rejection_reason}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
           {/* ✅ NEW: Smart Description with AI Badge */}
           <div>
             <div className="flex items-center justify-between mb-2">
@@ -276,22 +382,62 @@ export const DocumentDetailPage = () => {
       {/* Preview Card */}
       <Card className="glass-card border-border/50">
         <CardHeader>
-          <CardTitle>Document Preview</CardTitle>
+          <CardTitle className="flex items-center gap-2">
+            Document Preview
+            {docData.download_allowed ? (
+              <Badge
+                variant="secondary"
+                className="text-xs bg-green-500/10 text-green-600 border-green-500/20"
+              >
+                ✓ Preview Available
+              </Badge>
+            ) : (
+              <Badge
+                variant="secondary"
+                className="text-xs bg-red-500/10 text-red-600 border-red-500/20"
+              >
+                🔒 Protected
+              </Badge>
+            )}
+          </CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
-            <div className="text-center p-6">
-              <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-              <p className="text-muted-foreground font-medium">
-                Preview not available
-              </p>
-              <p className="text-sm text-muted-foreground mt-2">
-                {document.download_allowed
-                  ? "Download the file to view its full content."
-                  : "This document is protected and cannot be previewed."}
-              </p>
+          {!docData.download_allowed ? (
+            // Protected documents - no preview to prevent circumventing download restrictions
+            <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
+              <div className="text-center p-6 max-w-md">
+                <Shield className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                <p className="text-muted-foreground font-medium mb-2">
+                  Preview Disabled for Protected Documents
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  This document has been marked as protected by the uploader.
+                  Preview is disabled to prevent unauthorized access. If you
+                  need access, please contact the document owner or your
+                  administrator.
+                </p>
+              </div>
             </div>
-          </div>
+          ) : docData.s3_url ? (
+            // Downloadable documents - show preview
+            <SecureDocumentViewer
+              url={docData.s3_url}
+              fileType={docData.file_type}
+              userName={user?.name || user?.email}
+            />
+          ) : (
+            <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
+              <div className="text-center p-6">
+                <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                <p className="text-muted-foreground font-medium">
+                  Preview not available
+                </p>
+                <p className="text-sm text-muted-foreground mt-2">
+                  File not found in storage.
+                </p>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

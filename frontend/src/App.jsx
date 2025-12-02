@@ -26,6 +26,7 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { DocumentExplorerPage } from "./pages/documents/DocumentExplorerPage";
 import { DocumentDetailPage } from "./pages/documents/DocumentDetailPage";
 import { DocumentUploadPage } from "./pages/documents/DocumentUploadPage";
+import { ApprovalsPage } from "./pages/documents/ApprovalsPage";
 
 // AI Chat
 import { AIChatPage } from "./pages/AIChatPage";
@@ -134,6 +135,16 @@ const App = () => {
             <Route path=":id" element={<DocumentDetailPage />} />
           </Route>
           <Route path="bookmarks" element={<BookmarksPage />} />
+          <Route
+            path="approvals"
+            element={
+              <ProtectedRoute
+                allowedRoles={["developer", "moe_admin", "university_admin"]}
+              >
+                <ApprovalsPage />
+              </ProtectedRoute>
+            }
+          />
           <Route
             path="upload"
             element={

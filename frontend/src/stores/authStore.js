@@ -90,6 +90,32 @@ export const useAuthStore = create(
         });
       },
 
+      // ✅ Refresh user data from API
+      refreshUser: async () => {
+        const token = get().token;
+        if (!token) return;
+
+        try {
+          const response = await fetch(
+            `${
+              import.meta.env.VITE_API_URL || "http://localhost:8000"
+            }/auth/me`,
+            {
+              headers: {
+                Authorization: `Bearer ${token}`,
+              },
+            }
+          );
+
+          if (response.ok) {
+            const userData = await response.json();
+            get().setUser(userData);
+          }
+        } catch (error) {
+          console.error("Failed to refresh user data:", error);
+        }
+      },
+
       // ✅ Set user data
       setUser: (user) => {
         set({ user });
@@ -189,6 +215,9 @@ export const useAuthStore = create(
 
             // Start session timers
             get().startSessionTimers();
+
+            // Refresh user data from API to get latest info (including name)
+            get().refreshUser();
           } catch (error) {
             console.error("Auth initialization error:", error);
             get().logout();

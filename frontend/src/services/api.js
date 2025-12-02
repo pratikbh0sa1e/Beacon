@@ -97,6 +97,19 @@ export const documentAPI = {
     api.get(`/documents/${docId}/download`, { responseType: "blob" }),
   reprocessEmbeddings: () => api.post("/documents/reprocess-embeddings"),
   getVectorStats: () => api.get("/documents/vector-stats"),
+
+  // Workflow endpoints
+  submitForReview: (docId) => api.post(`/documents/${docId}/submit-for-review`),
+  approveDocument: (docId) => api.post(`/documents/${docId}/approve`),
+  rejectDocument: (docId, reason) =>
+    api.post(`/documents/${docId}/reject`, { reason }),
+  requestChanges: (docId, changes) =>
+    api.post(`/documents/${docId}/request-changes`, {
+      changes_requested: changes,
+    }),
+  getPendingApprovals: () => api.get("/documents/approvals/pending"),
+  updateStatus: (docId, newStatus) =>
+    api.post(`/documents/${docId}/update-status`, { new_status: newStatus }),
 };
 
 // ============ APPROVAL ENDPOINTS ============

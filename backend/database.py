@@ -112,10 +112,16 @@ class Document(Base):
     uploader_id = Column(Integer, ForeignKey("users.id"), nullable=True)
     download_allowed = Column(Boolean, default=False, nullable=False)
     # Approval workflow
-    approval_status = Column(String(50), default="pending", index=True)
-    # Status: pending, approved, rejected
+    approval_status = Column(String(50), default="draft", index=True)
+    # Status: draft, pending, under_review, changes_requested, approved, 
+    #         restricted_approved, archived, rejected, flagged, expired
     approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
     approved_at = Column(DateTime, nullable=True)
+    # Escalation flag for MoE review
+    requires_moe_approval = Column(Boolean, default=False, nullable=False, index=True)
+    escalated_at = Column(DateTime, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    expiry_date = Column(DateTime, nullable=True)
     
     uploaded_at = Column(DateTime, default=datetime.utcnow)
     user_description = Column(Text, nullable=True)

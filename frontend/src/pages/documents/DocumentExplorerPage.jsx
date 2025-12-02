@@ -272,7 +272,29 @@ export const DocumentExplorerPage = () => {
                   <Card className="glass-card border-border/50 hover:border-primary/50 h-full flex flex-col transition-all duration-300 hover:shadow-lg">
                     <CardContent className="p-6 flex flex-col flex-1">
                       <div className="flex items-start justify-between mb-4">
-                        <Badge variant="outline">{doc.category}</Badge>
+                        <div className="flex flex-col gap-2">
+                          <Badge variant="outline">{doc.category}</Badge>
+                          {/* Approval Status Badge */}
+                          {doc.approval_status && (
+                            <Badge
+                              className={
+                                doc.approval_status === "approved"
+                                  ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
+                                  : doc.approval_status === "pending"
+                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                                  : doc.approval_status === "rejected"
+                                  ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                                  : doc.approval_status === "draft"
+                                  ? "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                                  : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                              }
+                            >
+                              {doc.approval_status
+                                .replace("_", " ")
+                                .toUpperCase()}
+                            </Badge>
+                          )}
+                        </div>
                         <div className="flex gap-2">
                           <Badge
                             variant={

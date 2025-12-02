@@ -22,8 +22,21 @@ export const VerifyEmailPage = () => {
       return;
     }
 
-    verifyEmail(token);
-  }, [searchParams]);
+    // Only verify once - prevent double calls
+    let isMounted = true;
+
+    const doVerification = async () => {
+      if (isMounted) {
+        await verifyEmail(token);
+      }
+    };
+
+    doVerification();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []); // Empty dependency array - only run once on mount
 
   const verifyEmail = async (token) => {
     try {

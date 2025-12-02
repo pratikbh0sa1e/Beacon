@@ -1,7 +1,8 @@
-from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks
+from fastapi import APIRouter, UploadFile, File, Form, Depends, HTTPException, BackgroundTasks, Body
 from sqlalchemy.orm import Session
 from fastapi.responses import FileResponse
 from typing import List,Optional
+from pydantic import BaseModel
 import os
 import shutil
 import re
@@ -21,6 +22,13 @@ os.makedirs(UPLOAD_DIR, exist_ok=True)
 
 # Initialize metadata extractor
 metadata_extractor = MetadataExtractor()
+
+# Pydantic models for request bodies
+class RejectRequest(BaseModel):
+    reason: str
+
+class ChangesRequest(BaseModel):
+    changes_requested: str
 
 def sanitize_filename(filename: str) -> str:
     """Sanitize filename for Supabase storage"""
@@ -390,6 +398,9 @@ async def upload_documents(
              except ValueError: pass 
         
         # 5. Create Document
+        # MoE Admin and Developer don't need approval - their uploads are auto-approved
+        initial_status = "approved" if current_user.role in ["moe_admin", "developer"] else "draft"
+        
         doc = Document(
             filename=file.filename,
             file_type=file_ext,
@@ -399,10 +410,12 @@ async def upload_documents(
             uploader_id=current_user.id,
             institution_id=final_inst_id,
             visibility_level=visibility or "public",
-            approval_status="pending",
+            approval_status=initial_status,  # MoE/Developer: approved, Others: draft
             download_allowed=download_allowed,
             version=version,
-            user_description=description
+            user_description=description,
+            approved_by=current_user.id if current_user.role in ["moe_admin", "developer"] else None,
+            approved_at=datetime.utcnow() if current_user.role in ["moe_admin", "developer"] else None
         )
         db.add(doc)
         db.commit()
@@ -525,46 +538,69 @@ async def list_documents(
     )
     
     # ==================================================================
-    # 🔒 ROLE-BASED VISIBILITY LOGIC
+    # 🔒 ROLE-BASED VISIBILITY LOGIC (Security through Obscurity + Access Control)
     # ==================================================================
     
-    # 1. DEVELOPER: God mode - sees everything.
+    # 1. DEVELOPER: Full access to everything
     if current_user.role == "developer":
-        pass 
+        pass  # No filters - sees all documents
 
-    # 2. MINISTRY ADMIN: Sees almost everything across all institutions.
+    # 2. MOE ADMIN: Respects institutional autonomy
     elif current_user.role == "moe_admin":
-        # Can see Public, Restricted, and ALL Institution docs.
-        # Cannot see "Confidential" docs (unless uploaded by them, handled separately).
-        query = query.filter(
-            Document.visibility_level.in_(["public", "restricted", "institution_only"])
-        )
-
-    # 3. UNIVERSITY ADMIN: Sees specific docs for THEIR institution.
-    elif current_user.role == "university_admin":
-        # Sees:
-        # A) Any Public document
-        # B) Institution/Restricted docs belonging to THEIR Institution
+        # MOE Admin can ONLY see:
+        # a) Public documents (everyone can see)
+        # b) Documents pending approval (requires_moe_approval)
+        # c) Documents from MOE institution (if MOE has an institution_id)
+        # d) Documents they uploaded
         query = query.filter(
             or_(
+                # Public documents
                 Document.visibility_level == "public",
-                and_(
-                    Document.visibility_level.in_(["institution_only", "restricted"]),
-                    Document.institution_id == current_user.institution_id
-                )
+                # Documents pending approval (universities requesting MOE approval)
+                Document.approval_status == "pending",
+                # Documents from MOE's own institution (if applicable)
+                Document.institution_id == current_user.institution_id,
+                # Documents uploaded by this MOE admin
+                Document.uploader_id == current_user.id
             )
         )
 
-    # 4. STUDENT / PUBLIC VIEWER / OTHERS
-    else:
-        # Sees:
-        # A) Public documents
-        # B) "Institution Only" documents from THEIR Institution
-        
-        # Define what they can see
+    # 3. UNIVERSITY ADMIN: Sees docs from their institution + public
+    elif current_user.role == "university_admin":
+        query = query.filter(
+            or_(
+                # Public documents (everyone can see)
+                Document.visibility_level == "public",
+                # Confidential, Restricted, Institution-only from THEIR institution
+                and_(
+                    Document.visibility_level.in_(["confidential", "restricted", "institution_only"]),
+                    Document.institution_id == current_user.institution_id
+                ),
+                # OR documents they uploaded (ownership)
+                Document.uploader_id == current_user.id
+            )
+        )
+
+    # 4. DOCUMENT OFFICER: Sees restricted/institution docs from their institution + public
+    elif current_user.role == "document_officer":
+        query = query.filter(
+            or_(
+                # Public documents
+                Document.visibility_level == "public",
+                # Restricted and Institution-only from THEIR institution
+                and_(
+                    Document.visibility_level.in_(["restricted", "institution_only"]),
+                    Document.institution_id == current_user.institution_id
+                ),
+                # OR documents they uploaded
+                Document.uploader_id == current_user.id
+            )
+        )
+
+    # 5. STUDENT: Sees public + institution-only from their institution
+    elif current_user.role == "student":
         visible_conditions = [Document.visibility_level == "public"]
         
-        # If they belong to an institution (Students), add that access
         if current_user.institution_id:
             visible_conditions.append(
                 and_(
@@ -572,16 +608,42 @@ async def list_documents(
                     Document.institution_id == current_user.institution_id
                 )
             )
-            
-        # Apply the filter
+        
         query = query.filter(or_(*visible_conditions))
+
+    # 6. PUBLIC VIEWER / OTHERS: Only public documents
+    else:
+        query = query.filter(Document.visibility_level == "public")
 
     # ==================================================================
     # ✅ APPROVAL STATUS FILTER
     # ==================================================================
-    # Only show approved documents to regular users
-    # Admins and developers can see all statuses
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    # Draft documents: Only visible to uploader and admins from same institution
+    # Approved documents: Visible to everyone (based on visibility level)
+    # Pending/Under Review: Visible to admins
+    # Other statuses: Visible to admins and uploader
+    
+    if current_user.role == "developer":
+        # Developer sees everything
+        pass
+    elif current_user.role in ["moe_admin", "university_admin"]:
+        # Admins see: approved, pending, under_review, changes_requested, rejected, and their own drafts
+        query = query.filter(
+            or_(
+                Document.approval_status.in_(["approved", "pending", "under_review", "changes_requested", "rejected", "archived", "flagged"]),
+                Document.uploader_id == current_user.id  # Their own drafts
+            )
+        )
+    elif current_user.role == "document_officer":
+        # Doc officers see: approved documents and their own drafts
+        query = query.filter(
+            or_(
+                Document.approval_status == "approved",
+                Document.uploader_id == current_user.id  # Their own drafts
+            )
+        )
+    else:
+        # Students and public: Only approved documents
         query = query.filter(Document.approval_status == "approved")
     
     # ==================================================================
@@ -642,6 +704,7 @@ async def list_documents(
             "category": meta.document_type if meta else "Uncategorized",
             "visibility": doc.visibility_level,
             "download_allowed": doc.download_allowed,
+            "approval_status": doc.approval_status,
             "department": meta.department if meta else "Unknown",
             "year": meta.date_published.year if meta and meta.date_published else datetime.now().year,
             "created_at": doc.uploaded_at,
@@ -718,8 +781,12 @@ async def get_document_vector_stats(document_id: int):
 #         raise HTTPException(status_code=404, detail="Document not found")
 #     return doc
 @router.get("/{document_id}")
-async def get_document(document_id: int, db: Session = Depends(get_db)):
-    """Get full document details"""
+async def get_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get full document details with access control"""
     result = db.query(Document, DocumentMetadata, Institution).\
         outerjoin(DocumentMetadata, Document.id == DocumentMetadata.document_id).\
         outerjoin(Institution, Document.institution_id == Institution.id).\
@@ -729,6 +796,91 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Document not found")
     
     doc, meta, inst = result
+    
+    # ==================================================================
+    # 🔒 ACCESS CONTROL CHECK
+    # ==================================================================
+    def check_access():
+        """Check if current user can access this document - Respects institutional autonomy"""
+        visibility = doc.visibility_level
+        user_role = current_user.role
+        user_institution = current_user.institution_id
+        doc_institution = doc.institution_id
+        is_uploader = doc.uploader_id == current_user.id
+        approval_status = doc.approval_status
+        
+        # Developer: Full access
+        if user_role == "developer":
+            return True
+        
+        # Public documents: Everyone can access
+        if visibility == "public":
+            return True
+        
+        # Uploader: Always has access to their own documents
+        if is_uploader:
+            return True
+        
+        # MOE Admin: Institutional autonomy rules
+        if user_role == "moe_admin":
+            # Can access if:
+            # a) Document is pending approval (university requesting MOE review)
+            if approval_status == "pending":
+                return True
+            # b) Document is from MOE's own institution
+            if user_institution and user_institution == doc_institution:
+                return True
+            # c) Document is public (already handled above)
+            # Otherwise, NO ACCESS to university documents
+            return False
+        
+        # Confidential documents
+        if visibility == "confidential":
+            # Only: Developer, University Admin (same institution), Uploader
+            if user_role == "university_admin" and user_institution == doc_institution:
+                return True
+            return False
+        
+        # Restricted documents
+        if visibility == "restricted":
+            # Only: Developer, University Admin (same inst), Document Officer (same inst)
+            if user_role in ["university_admin", "document_officer"] and user_institution == doc_institution:
+                return True
+            return False
+        
+        # Institution-only documents
+        if visibility == "institution_only":
+            # Only: Developer, University Admin (same inst), Document Officer (same inst), Students (same inst)
+            if user_role in ["university_admin", "document_officer", "student"] and user_institution == doc_institution:
+                return True
+            return False
+        
+        return False
+    
+    # Check access
+    if not check_access():
+        visibility = doc.visibility_level
+        # Return appropriate error message based on visibility level
+        if visibility == "confidential":
+            raise HTTPException(
+                status_code=403,
+                detail="Access Denied — This document requires elevated clearance."
+            )
+        elif visibility == "restricted":
+            raise HTTPException(
+                status_code=403,
+                detail="This document has limited access permissions."
+            )
+        elif visibility == "institution_only":
+            raise HTTPException(
+                status_code=403,
+                detail="Access restricted to institution members."
+            )
+        else:
+            raise HTTPException(status_code=403, detail="Access denied")
+    
+    # Get uploader info
+    uploader = db.query(User).filter(User.id == doc.uploader_id).first()
     
     return {
         "id": doc.id,
@@ -751,7 +903,11 @@ async def get_document(document_id: int, db: Session = Depends(get_db)):
         "visibility": doc.visibility_level,
         "download_allowed": doc.download_allowed,
         "version": doc.version,
-        "institution": {"id": inst.id, "name": inst.name, "type": inst.type} if inst else None
+        "approval_status": doc.approval_status,
+        "requires_moe_approval": doc.requires_moe_approval,
+        "rejection_reason": doc.rejection_reason,
+        "institution": {"id": inst.id, "name": inst.name, "type": inst.type} if inst else None,
+        "uploader": {"id": uploader.id, "name": uploader.name, "role": uploader.role} if uploader else None
     }
 
 @router.get("/{document_id}/status")
@@ -844,6 +1000,62 @@ async def download_document(
     doc = db.query(Document).filter(Document.id == document_id).first()
     if not doc:
         raise HTTPException(status_code=404, detail="Document not found")
+    
+    # ==================================================================
+    # 🔒 ACCESS CONTROL CHECK (Same as get_document)
+    # ==================================================================
+    def check_access():
+        """Check if current user can access this document - Respects institutional autonomy"""
+        visibility = doc.visibility_level
+        user_role = current_user.role
+        user_institution = current_user.institution_id
+        doc_institution = doc.institution_id
+        is_uploader = doc.uploader_id == current_user.id
+        approval_status = doc.approval_status
+        
+        if user_role == "developer":
+            return True
+        if visibility == "public":
+            return True
+        if is_uploader:
+            return True
+        
+        # MOE Admin: Institutional autonomy
+        if user_role == "moe_admin":
+            if approval_status == "pending":
+                return True
+            if user_institution and user_institution == doc_institution:
+                return True
+            return False
+        
+        if visibility == "confidential":
+            if user_role == "university_admin" and user_institution == doc_institution:
+                return True
+            return False
+        
+        if visibility == "restricted":
+            if user_role in ["university_admin", "document_officer"] and user_institution == doc_institution:
+                return True
+            return False
+        
+        if visibility == "institution_only":
+            if user_role in ["university_admin", "document_officer", "student"] and user_institution == doc_institution:
+                return True
+            return False
+        
+        return False
+    
+    # Check access first
+    if not check_access():
+        visibility = doc.visibility_level
+        if visibility == "confidential":
+            raise HTTPException(status_code=403, detail="Access Denied — This document requires elevated clearance.")
+        elif visibility == "restricted":
+            raise HTTPException(status_code=403, detail="This document has limited access permissions.")
+        elif visibility == "institution_only":
+            raise HTTPException(status_code=403, detail="Access restricted to institution members.")
+        else:
+            raise HTTPException(status_code=403, detail="Access denied")
     
     # 1. Security Check: Is download allowed?
     if not doc.download_allowed:
@@ -981,4 +1193,346 @@ async def embed_documents(
         "status": "embedding_started",
         "doc_ids": doc_ids,
         "estimated_time": len(doc_ids) * 2  # ~2 seconds per document
+    }
+
+# ==================================================================
+# 📋 DOCUMENT WORKFLOW ENDPOINTS (Option 2 Compliance)
+# ==================================================================
+
+@router.post("/{document_id}/submit-for-review")
+async def submit_document_for_review(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Submit document for MoE review (University Admin only)
+    Changes status from 'draft' to 'pending' and sets escalation flag
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Only University Admin or uploader can submit for review
+    if current_user.role not in ["university_admin", "developer"] and current_user.id != doc.uploader_id:
+        raise HTTPException(status_code=403, detail="Only University Admin can submit documents for review")
+    
+    # Must be from same institution
+    if current_user.role == "university_admin" and current_user.institution_id != doc.institution_id:
+        raise HTTPException(status_code=403, detail="Can only submit documents from your institution")
+    
+    # Update document status
+    doc.approval_status = "pending"
+    doc.requires_moe_approval = True
+    doc.escalated_at = datetime.utcnow()
+    db.commit()
+    
+    # Create notification for MoE Admin
+    from backend.database import Notification
+    moe_admins = db.query(User).filter(User.role == "moe_admin").all()
+    
+    for moe_admin in moe_admins:
+        notification = Notification(
+            user_id=moe_admin.id,
+            type="document_approval",
+            title="New Document Pending Review",
+            message=f"Document '{doc.filename}' has been submitted for MoE approval by {current_user.name}",
+            priority="high",
+            action_url=f"/approvals/{document_id}",
+            action_metadata={
+                "document_id": document_id,
+                "submitter_id": current_user.id,
+                "institution_id": doc.institution_id
+            }
+        )
+        db.add(notification)
+    
+    # Notify Developer (copy)
+    developers = db.query(User).filter(User.role == "developer").all()
+    for dev in developers:
+        notification = Notification(
+            user_id=dev.id,
+            type="document_approval",
+            title="Document Submitted for Review",
+            message=f"Document '{doc.filename}' submitted for MoE approval",
+            priority="medium",
+            action_url=f"/approvals/{document_id}",
+            action_metadata={"document_id": document_id}
+        )
+        db.add(notification)
+    
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "Document submitted for MoE review",
+        "document_id": document_id,
+        "approval_status": "pending"
+    }
+
+
+@router.post("/{document_id}/approve")
+async def approve_document(
+    document_id: int,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Approve a document (MoE Admin or University Admin)
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Check permissions
+    can_approve = False
+    
+    if current_user.role == "developer":
+        can_approve = True
+    elif current_user.role == "moe_admin" and doc.requires_moe_approval:
+        can_approve = True
+    elif current_user.role == "university_admin" and current_user.institution_id == doc.institution_id:
+        can_approve = True
+    
+    if not can_approve:
+        raise HTTPException(status_code=403, detail="You don't have permission to approve this document")
+    
+    # Update document
+    doc.approval_status = "approved"
+    doc.approved_by = current_user.id
+    doc.approved_at = datetime.utcnow()
+    db.commit()
+    
+    # Notify uploader
+    from backend.database import Notification
+    notification = Notification(
+        user_id=doc.uploader_id,
+        type="document_approved",
+        title="Document Approved",
+        message=f"Your document '{doc.filename}' has been approved by {current_user.name}",
+        priority="high",
+        action_url=f"/documents/{document_id}",
+        action_metadata={"document_id": document_id, "approved_by": current_user.id}
+    )
+    db.add(notification)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "Document approved",
+        "document_id": document_id,
+        "approved_by": current_user.name
+    }
+
+
+@router.post("/{document_id}/reject")
+async def reject_document(
+    document_id: int,
+    request: RejectRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Reject a document with reason (MoE Admin or University Admin)
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Check permissions
+    can_reject = False
+    
+    if current_user.role == "developer":
+        can_reject = True
+    elif current_user.role == "moe_admin" and doc.requires_moe_approval:
+        can_reject = True
+    elif current_user.role == "university_admin" and current_user.institution_id == doc.institution_id:
+        can_reject = True
+    
+    if not can_reject:
+        raise HTTPException(status_code=403, detail="You don't have permission to reject this document")
+    
+    # Update document
+    doc.approval_status = "rejected"
+    doc.rejection_reason = request.reason
+    doc.approved_by = current_user.id
+    doc.approved_at = datetime.utcnow()
+    db.commit()
+    
+    # Notify uploader
+    from backend.database import Notification
+    notification = Notification(
+        user_id=doc.uploader_id,
+        type="document_rejected",
+        title="Document Rejected",
+        message=f"Your document '{doc.filename}' has been rejected. Reason: {request.reason}",
+        priority="high",
+        action_url=f"/documents/{document_id}",
+        action_metadata={"document_id": document_id, "rejected_by": current_user.id, "reason": request.reason}
+    )
+    db.add(notification)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "Document rejected",
+        "document_id": document_id,
+        "reason": request.reason
+    }
+
+
+@router.post("/{document_id}/request-changes")
+async def request_changes(
+    document_id: int,
+    request: ChangesRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Request changes to a document (MoE Admin or University Admin)
+    """
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Check permissions
+    can_request = False
+    
+    if current_user.role == "developer":
+        can_request = True
+    elif current_user.role == "moe_admin" and doc.requires_moe_approval:
+        can_request = True
+    elif current_user.role == "university_admin" and current_user.institution_id == doc.institution_id:
+        can_request = True
+    
+    if not can_request:
+        raise HTTPException(status_code=403, detail="You don't have permission to request changes")
+    
+    # Update document
+    doc.approval_status = "changes_requested"
+    doc.rejection_reason = request.changes_requested
+    db.commit()
+    
+    # Notify uploader
+    from backend.database import Notification
+    notification = Notification(
+        user_id=doc.uploader_id,
+        type="changes_requested",
+        title="Changes Requested",
+        message=f"Changes requested for '{doc.filename}': {request.changes_requested}",
+        priority="high",
+        action_url=f"/documents/{document_id}",
+        action_metadata={"document_id": document_id, "requested_by": current_user.id}
+    )
+    db.add(notification)
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": "Changes requested",
+        "document_id": document_id
+    }
+
+
+@router.get("/approvals/pending")
+async def get_pending_approvals(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Get list of documents pending approval (for MoE Admin and University Admin)
+    """
+    query = db.query(Document, DocumentMetadata, Institution, User).outerjoin(
+        DocumentMetadata, Document.id == DocumentMetadata.document_id
+    ).outerjoin(
+        Institution, Document.institution_id == Institution.id
+    ).outerjoin(
+        User, Document.uploader_id == User.id
+    )
+    
+    # Filter based on role
+    if current_user.role == "moe_admin":
+        # MoE sees documents that require MoE approval
+        query = query.filter(
+            Document.approval_status == "pending",
+            Document.requires_moe_approval == True
+        )
+    elif current_user.role == "university_admin":
+        # University Admin sees pending docs from their institution
+        query = query.filter(
+            Document.approval_status == "pending",
+            Document.institution_id == current_user.institution_id
+        )
+    elif current_user.role == "developer":
+        # Developer sees all pending
+        query = query.filter(Document.approval_status == "pending")
+    else:
+        raise HTTPException(status_code=403, detail="Access denied")
+    
+    results = query.order_by(Document.escalated_at.desc()).all()
+    
+    documents = []
+    for doc, meta, inst, uploader in results:
+        documents.append({
+            "id": doc.id,
+            "filename": doc.filename,
+            "title": meta.title if meta else doc.filename,
+            "description": doc.user_description or (meta.summary if meta else ""),
+            "category": meta.document_type if meta else "Uncategorized",
+            "visibility": doc.visibility_level,
+            "institution": {"id": inst.id, "name": inst.name} if inst else None,
+            "uploader": {"id": uploader.id, "name": uploader.name} if uploader else None,
+            "submitted_at": doc.escalated_at,
+            "requires_moe_approval": doc.requires_moe_approval
+        })
+    
+    return {"total": len(documents), "documents": documents}
+
+
+@router.post("/{document_id}/update-status")
+async def update_document_status(
+    document_id: int,
+    new_status: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Update document status (for admins)
+    Valid statuses: draft, pending, under_review, changes_requested, approved, 
+                    restricted_approved, archived, rejected, flagged, expired
+    """
+    valid_statuses = [
+        "draft", "pending", "under_review", "changes_requested", 
+        "approved", "restricted_approved", "archived", "rejected", "flagged", "expired"
+    ]
+    
+    if new_status not in valid_statuses:
+        raise HTTPException(status_code=400, detail=f"Invalid status. Must be one of: {', '.join(valid_statuses)}")
+    
+    doc = db.query(Document).filter(Document.id == document_id).first()
+    if not doc:
+        raise HTTPException(status_code=404, detail="Document not found")
+    
+    # Check permissions
+    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+        raise HTTPException(status_code=403, detail="Only admins can update document status")
+    
+    if current_user.role == "university_admin" and current_user.institution_id != doc.institution_id:
+        raise HTTPException(status_code=403, detail="Can only update documents from your institution")
+    
+    # Update status
+    old_status = doc.approval_status
+    doc.approval_status = new_status
+    
+    if new_status in ["approved", "restricted_approved"]:
+        doc.approved_by = current_user.id
+        doc.approved_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return {
+        "status": "success",
+        "message": f"Status updated from '{old_status}' to '{new_status}'",
+        "document_id": document_id,
+        "new_status": new_status
     }
