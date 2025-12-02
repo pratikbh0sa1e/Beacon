@@ -99,15 +99,24 @@ class LazyEmbedder:
             logger.info("Generating embeddings...")
             embeddings = self.embedder.embed_batch(chunks)
             
-            # Create metadata for each chunk
+            # Create metadata for each chunk (including section info)
             metadata_list = []
-            for i, chunk_text in enumerate(chunks):
-                metadata_list.append({
+            for i, chunk_dict in enumerate(chunk_dicts):
+                chunk_metadata = {
                     "chunk_index": i,
                     "filename": filename,
                     "document_id": doc_id,
-                    "text_length": len(chunk_text)
-                })
+                    "text_length": len(chunk_dict["text"])
+                }
+                
+                # Add section information if available
+                if "metadata" in chunk_dict:
+                    if "section_header" in chunk_dict["metadata"]:
+                        chunk_metadata["section_header"] = chunk_dict["metadata"]["section_header"]
+                    if "has_section" in chunk_dict["metadata"]:
+                        chunk_metadata["has_section"] = chunk_dict["metadata"]["has_section"]
+                
+                metadata_list.append(chunk_metadata)
             
             # Store in pgvector
             logger.info(f"Storing {len(embeddings)} embeddings in pgvector...")

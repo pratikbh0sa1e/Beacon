@@ -156,7 +156,6 @@ class PolicyRAGAgent:
             handle_parsing_errors=True,
             max_iterations=15,  # Increased from 5 to handle complex queries
             max_execution_time=20,  # 20 second timeout for safety
-            early_stopping_method="generate",  # Generate answer even if not fully complete
             return_intermediate_steps=True  # Enable intermediate steps for citations
         )
         
