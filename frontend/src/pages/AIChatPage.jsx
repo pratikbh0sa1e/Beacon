@@ -18,6 +18,9 @@ import {
   Menu,
   ChevronDown,
   ChevronUp,
+  CheckCircle,
+  Clock,
+  XCircle,
 } from "lucide-react";
 import { useChatStore } from "../stores/chatStore";
 import { ChatSidebar } from "../components/chat/ChatSidebar";
@@ -29,6 +32,40 @@ import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
 import { toast } from "sonner";
 import "highlight.js/styles/github-dark.css";
+
+// Helper function to get approval status icon and color
+const getApprovalStatusIcon = (status) => {
+  switch (status) {
+    case "approved":
+      return {
+        icon: CheckCircle,
+        className: "text-green-600 dark:text-green-400",
+        title: "Approved",
+      };
+    case "pending":
+    case "under_review":
+      return {
+        icon: Clock,
+        className: "text-yellow-600 dark:text-yellow-400",
+        title: "Pending Review",
+      };
+    case "rejected":
+    case "changes_requested":
+      return {
+        icon: XCircle,
+        className: "text-red-600 dark:text-red-400",
+        title: "Rejected",
+      };
+    case "draft":
+      return {
+        icon: FileText,
+        className: "text-gray-600 dark:text-gray-400",
+        title: "Draft",
+      };
+    default:
+      return null;
+  }
+};
 
 const Message = ({ message, isUser, onCitationClick }) => {
   const [showAllCitations, setShowAllCitations] = useState(false);
@@ -161,34 +198,46 @@ const Message = ({ message, isUser, onCitationClick }) => {
           {citations.length > 0 && (
             <>
               {/* Show visible citation pills */}
-              {visibleCitations.map((citation, idx) => (
-                <motion.div
-                  key={idx}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ delay: idx * 0.05 }}
-                >
-                  <Badge
-                    variant="secondary"
-                    className="text-xs cursor-pointer hover:bg-accent transition-colors max-w-[200px] group"
-                    onClick={() => onCitationClick(citation.document_id)}
-                    title={`${citation.source}${citation.page_number ? ` - Page ${citation.page_number}` : ''}`}
+              {visibleCitations.map((citation, idx) => {
+                const statusInfo = getApprovalStatusIcon(citation.approval_status);
+                const StatusIcon = statusInfo?.icon;
+                
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, scale: 0.8 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: idx * 0.05 }}
                   >
-                    <FileText className="h-3 w-3 mr-1 flex-shrink-0" />
-                    <span className="truncate">
-                      {citation.source.length > 20
-                        ? citation.source.substring(0, 20) + "..."
-                        : citation.source}
-                    </span>
-                    {citation.page_number && (
-                      <span className="ml-1 text-[10px] opacity-70">
-                        p.{citation.page_number}
+                    <Badge
+                      variant="secondary"
+                      className="text-xs cursor-pointer hover:bg-accent transition-colors max-w-[200px] group"
+                      onClick={() => onCitationClick(citation.document_id)}
+                      title={`${citation.source}${citation.page_number ? ` - Page ${citation.page_number}` : ''}${statusInfo ? ` - ${statusInfo.title}` : ''}`}
+                    >
+                      <FileText className="h-3 w-3 mr-1 flex-shrink-0" />
+                      <span className="truncate">
+                        {citation.source.length > 20
+                          ? citation.source.substring(0, 20) + "..."
+                          : citation.source}
                       </span>
-                    )}
-                    <ExternalLink className="h-2.5 w-2.5 ml-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
-                  </Badge>
-                </motion.div>
-              ))}
+                      {citation.page_number && (
+                        <span className="ml-1 text-[10px] opacity-70">
+                          p.{citation.page_number}
+                        </span>
+                      )}
+                      {/* Approval Status Icon */}
+                      {StatusIcon && (
+                        <StatusIcon 
+                          className={`h-3 w-3 ml-1 flex-shrink-0 ${statusInfo.className}`}
+                          title={statusInfo.title}
+                        />
+                      )}
+                      <ExternalLink className="h-2.5 w-2.5 ml-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    </Badge>
+                  </motion.div>
+                );
+              })}
               
               {/* Show all toggle button */}
               {hasManyCitations && (
