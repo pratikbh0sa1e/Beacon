@@ -44,28 +44,63 @@ async def get_document_stats(
         # Base query with role-based filtering
         query = db.query(Document)
         
-        # Apply role-based access control
-        if current_user.role == "student" or current_user.role == "public_viewer":
+        # Apply role-based access control (respects institutional autonomy)
+        if current_user.role == "developer":
+            # Developer: Full access to all documents
+            pass  # No filters
+        
+        elif current_user.role == "moe_admin":
+            # MoE Admin: LIMITED access (respects institutional autonomy)
+            query = query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.approval_status == "pending",
+                    Document.institution_id == current_user.institution_id,
+                    Document.uploader_id == current_user.id
+                )
+            )
+        
+        elif current_user.role == "university_admin":
+            # University Admin: Public + their institution
+            query = query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.institution_id == current_user.institution_id
+                )
+            )
+        
+        elif current_user.role == "document_officer":
+            # Document Officer: Public + their institution
+            query = query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.institution_id == current_user.institution_id
+                )
+            )
+        
+        elif current_user.role == "student":
+            # Student: Approved public + their institution's approved institution_only
             query = query.filter(
                 and_(
                     Document.approval_status == "approved",
-                    Document.visibility_level.in_(["public", "institution_only"])
+                    or_(
+                        Document.visibility_level == "public",
+                        and_(
+                            Document.visibility_level == "institution_only",
+                            Document.institution_id == current_user.institution_id
+                        )
+                    )
                 )
             )
-            if current_user.institution_id:
-                query = query.filter(
-                    (Document.visibility_level == "public") |
-                    (and_(
-                        Document.visibility_level == "institution_only",
-                        Document.institution_id == current_user.institution_id
-                    ))
-                )
-        elif current_user.role == "university_admin":
+        
+        elif current_user.role == "public_viewer":
+            # Public Viewer: Only approved public documents
             query = query.filter(
-                (Document.visibility_level == "public") |
-                (Document.institution_id == current_user.institution_id)
+                and_(
+                    Document.approval_status == "approved",
+                    Document.visibility_level == "public"
+                )
             )
-        # MoE admin and developer see all
         
         # Apply filters
         if category:
@@ -204,26 +239,57 @@ async def get_trending_topics(
             Document.uploaded_at >= date_threshold
         )
         
-        # Apply role-based access control
-        if current_user.role == "student" or current_user.role == "public_viewer":
+        # Apply role-based access control (respects institutional autonomy)
+        if current_user.role == "developer":
+            pass  # Full access
+        
+        elif current_user.role == "moe_admin":
+            # MoE Admin: LIMITED access
+            query = query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.approval_status == "pending",
+                    Document.institution_id == current_user.institution_id,
+                    Document.uploader_id == current_user.id
+                )
+            )
+        
+        elif current_user.role == "university_admin":
+            query = query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.institution_id == current_user.institution_id
+                )
+            )
+        
+        elif current_user.role == "document_officer":
+            query = query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.institution_id == current_user.institution_id
+                )
+            )
+        
+        elif current_user.role == "student":
             query = query.filter(
                 and_(
                     Document.approval_status == "approved",
-                    Document.visibility_level.in_(["public", "institution_only"])
+                    or_(
+                        Document.visibility_level == "public",
+                        and_(
+                            Document.visibility_level == "institution_only",
+                            Document.institution_id == current_user.institution_id
+                        )
+                    )
                 )
             )
-            if current_user.institution_id:
-                query = query.filter(
-                    (Document.visibility_level == "public") |
-                    (and_(
-                        Document.visibility_level == "institution_only",
-                        Document.institution_id == current_user.institution_id
-                    ))
-                )
-        elif current_user.role == "university_admin":
+        
+        elif current_user.role == "public_viewer":
             query = query.filter(
-                (Document.visibility_level == "public") |
-                (Document.institution_id == current_user.institution_id)
+                and_(
+                    Document.approval_status == "approved",
+                    Document.visibility_level == "public"
+                )
             )
         
         # Get all keywords
@@ -599,28 +665,59 @@ async def get_dashboard_summary(
     Returns all key metrics in one call for dashboard display
     """
     try:
-        # Total documents (role-based)
+        # Total documents (role-based - respects institutional autonomy)
         doc_query = db.query(Document)
         
-        if current_user.role == "student" or current_user.role == "public_viewer":
+        if current_user.role == "developer":
+            pass  # Full access
+        
+        elif current_user.role == "moe_admin":
+            # MoE Admin: LIMITED access
+            doc_query = doc_query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.approval_status == "pending",
+                    Document.institution_id == current_user.institution_id,
+                    Document.uploader_id == current_user.id
+                )
+            )
+        
+        elif current_user.role == "university_admin":
+            doc_query = doc_query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.institution_id == current_user.institution_id
+                )
+            )
+        
+        elif current_user.role == "document_officer":
+            doc_query = doc_query.filter(
+                or_(
+                    Document.visibility_level == "public",
+                    Document.institution_id == current_user.institution_id
+                )
+            )
+        
+        elif current_user.role == "student":
             doc_query = doc_query.filter(
                 and_(
                     Document.approval_status == "approved",
-                    Document.visibility_level.in_(["public", "institution_only"])
+                    or_(
+                        Document.visibility_level == "public",
+                        and_(
+                            Document.visibility_level == "institution_only",
+                            Document.institution_id == current_user.institution_id
+                        )
+                    )
                 )
             )
-            if current_user.institution_id:
-                doc_query = doc_query.filter(
-                    (Document.visibility_level == "public") |
-                    (and_(
-                        Document.visibility_level == "institution_only",
-                        Document.institution_id == current_user.institution_id
-                    ))
-                )
-        elif current_user.role == "university_admin":
+        
+        elif current_user.role == "public_viewer":
             doc_query = doc_query.filter(
-                (Document.visibility_level == "public") |
-                (Document.institution_id == current_user.institution_id)
+                and_(
+                    Document.approval_status == "approved",
+                    Document.visibility_level == "public"
+                )
             )
         
         total_documents = doc_query.count()

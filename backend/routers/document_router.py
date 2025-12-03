@@ -1564,11 +1564,15 @@ async def compare_documents(
     Returns:
         Structured comparison matrix with extracted information
     
-    Role-based access:
-    - Users can only compare documents they have access to
-    - Students/Public: Only approved public documents
-    - University Admin: Public + their institution documents
-    - MoE Admin/Developer: All documents
+    Role-based access (respects institutional autonomy):
+    - Developer: All documents
+    - MoE Admin: Public + pending approval + their institution + their uploads
+    - University Admin: Public + their institution
+    - Document Officer: Public + their institution
+    - Student: Approved public + their institution's approved institution_only
+    - Public Viewer: Only approved public documents
+    
+    Users can only compare documents they have access to.
     """
     try:
         # Validate input
@@ -1595,29 +1599,50 @@ async def compare_documents(
                     detail=f"Document {doc_id} not found"
                 )
             
-            # Role-based access control
+            # Role-based access control (matching existing document access rules)
             has_access = False
             
-            if current_user.role in ["developer", "moe_admin"]:
-                # Full access
+            # 1. DEVELOPER: Full access to everything
+            if current_user.role == "developer":
                 has_access = True
             
-            elif current_user.role == "university_admin":
-                # Access to public + their institution
-                if doc.visibility_level == "public":
-                    has_access = True
-                elif doc.institution_id == current_user.institution_id:
+            # 2. MOE ADMIN: Respects institutional autonomy
+            elif current_user.role == "moe_admin":
+                # MOE Admin can ONLY see:
+                # a) Public documents
+                # b) Documents pending approval (requires_moe_approval)
+                # c) Documents from MOE institution (if MOE has institution_id)
+                # d) Documents they uploaded
+                if (doc.visibility_level == "public" or
+                    doc.approval_status == "pending" or
+                    doc.institution_id == current_user.institution_id or
+                    doc.uploader_id == current_user.id):
                     has_access = True
             
-            elif current_user.role in ["document_officer", "student", "public_viewer"]:
-                # Access to approved public documents only
-                if doc.approval_status == "approved" and doc.visibility_level == "public":
+            # 3. UNIVERSITY ADMIN: Public + their institution
+            elif current_user.role == "university_admin":
+                if (doc.visibility_level == "public" or
+                    doc.institution_id == current_user.institution_id):
                     has_access = True
-                # Students can also see their institution's approved institution_only docs
-                elif (current_user.role == "student" and 
-                      doc.approval_status == "approved" and
+            
+            # 4. DOCUMENT OFFICER: Public + their institution
+            elif current_user.role == "document_officer":
+                if (doc.visibility_level == "public" or
+                    doc.institution_id == current_user.institution_id):
+                    has_access = True
+            
+            # 5. STUDENT: Approved public + their institution's approved institution_only
+            elif current_user.role == "student":
+                if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                    has_access = True
+                elif (doc.approval_status == "approved" and
                       doc.visibility_level == "institution_only" and
                       doc.institution_id == current_user.institution_id):
+                    has_access = True
+            
+            # 6. PUBLIC VIEWER: Only approved public documents
+            elif current_user.role == "public_viewer":
+                if (doc.approval_status == "approved" and doc.visibility_level == "public"):
                     has_access = True
             
             if not has_access:
@@ -1729,21 +1754,45 @@ async def detect_conflicts(
                     detail=f"Document {doc_id} not found"
                 )
             
-            # Role-based access control
+            # Role-based access control (matching existing document access rules)
             has_access = False
             
-            if current_user.role in ["developer", "moe_admin"]:
+            # 1. DEVELOPER: Full access
+            if current_user.role == "developer":
                 has_access = True
+            
+            # 2. MOE ADMIN: Limited access (respects institutional autonomy)
+            elif current_user.role == "moe_admin":
+                if (doc.visibility_level == "public" or
+                    doc.approval_status == "pending" or
+                    doc.institution_id == current_user.institution_id or
+                    doc.uploader_id == current_user.id):
+                    has_access = True
+            
+            # 3. UNIVERSITY ADMIN: Public + their institution
             elif current_user.role == "university_admin":
-                if doc.visibility_level == "public" or doc.institution_id == current_user.institution_id:
+                if (doc.visibility_level == "public" or
+                    doc.institution_id == current_user.institution_id):
                     has_access = True
-            elif current_user.role in ["document_officer", "student", "public_viewer"]:
-                if doc.approval_status == "approved" and doc.visibility_level == "public":
+            
+            # 4. DOCUMENT OFFICER: Public + their institution
+            elif current_user.role == "document_officer":
+                if (doc.visibility_level == "public" or
+                    doc.institution_id == current_user.institution_id):
                     has_access = True
-                elif (current_user.role == "student" and 
-                      doc.approval_status == "approved" and
+            
+            # 5. STUDENT: Approved public + their institution's approved institution_only
+            elif current_user.role == "student":
+                if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                    has_access = True
+                elif (doc.approval_status == "approved" and
                       doc.visibility_level == "institution_only" and
                       doc.institution_id == current_user.institution_id):
+                    has_access = True
+            
+            # 6. PUBLIC VIEWER: Only approved public documents
+            elif current_user.role == "public_viewer":
+                if (doc.approval_status == "approved" and doc.visibility_level == "public"):
                     has_access = True
             
             if not has_access:

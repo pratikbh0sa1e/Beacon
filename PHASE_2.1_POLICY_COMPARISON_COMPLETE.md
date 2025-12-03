@@ -8,12 +8,20 @@
 
 **Every comparison request validates user access to ALL documents:**
 
-### Access Rules:
-- **Developer/MoE Admin:** Can compare any documents
-- **University Admin:** Can compare public + their institution's documents
-- **Document Officer:** Can compare approved public documents only
-- **Student:** Can compare approved public + their institution's approved institution_only documents
-- **Public Viewer:** Can compare approved public documents only
+### Access Rules (Respects Institutional Autonomy):
+
+1. **Developer:** Full access to all documents
+2. **MoE Admin:** LIMITED access (respects institutional autonomy)
+   - Public documents
+   - Documents pending approval (requires_moe_approval = True)
+   - Documents from MoE's own institution (if applicable)
+   - Documents they uploaded
+3. **University Admin:** Public + their institution's documents
+4. **Document Officer:** Public + their institution's documents
+5. **Student:** Approved public + their institution's approved institution_only documents
+6. **Public Viewer:** Only approved public documents
+
+**IMPORTANT:** MoE Admin does NOT have full access to university documents. This respects institutional autonomy - universities maintain control over their internal documents.
 
 **If user lacks access to ANY document in the comparison, request is rejected with 403 Forbidden.**
 
@@ -161,17 +169,25 @@ curl -X POST "http://localhost:8000/documents/compare" \
   }'
 ```
 
-### Step 2: Role-Based Access Check
+### Step 2: Role-Based Access Check (Respects Institutional Autonomy)
 ```python
 # For each document:
-if user.role in ["developer", "moe_admin"]:
-    has_access = True
+if user.role == "developer":
+    has_access = True  # Full access
+elif user.role == "moe_admin":
+    # LIMITED access - respects institutional autonomy
+    has_access = (doc.visibility == "public" or
+                  doc.approval_status == "pending" or
+                  doc.institution_id == user.institution_id or
+                  doc.uploader_id == user.id)
 elif user.role == "university_admin":
     has_access = (doc.visibility == "public" or 
                   doc.institution_id == user.institution_id)
-elif user.role in ["student", "public_viewer"]:
+elif user.role == "student":
     has_access = (doc.approval_status == "approved" and 
-                  doc.visibility == "public")
+                  (doc.visibility == "public" or
+                   (doc.visibility == "institution_only" and
+                    doc.institution_id == user.institution_id)))
 ```
 
 ### Step 3: Fetch Document Data

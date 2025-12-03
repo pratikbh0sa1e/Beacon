@@ -4,18 +4,32 @@
 
 ---
 
-## 🔒 CONFIRMED: 100% ROLE-BASED ACCESS CONTROL
+## 🔒 CONFIRMED: 100% ROLE-BASED ACCESS CONTROL (Respects Institutional Autonomy)
 
 **Every single endpoint filters data by user role - NO user sees documents they shouldn't!**
 
+### Access Rules:
+1. **Developer:** Full access to all documents
+2. **MoE Admin:** LIMITED access (respects institutional autonomy)
+   - Public documents
+   - Documents pending approval
+   - Documents from MoE's own institution
+   - Documents they uploaded
+3. **University Admin:** Public + their institution
+4. **Document Officer:** Public + their institution
+5. **Student:** Approved public + their institution's approved institution_only
+6. **Public Viewer:** Only approved public documents
+
+**IMPORTANT:** MoE Admin does NOT have full access. This respects institutional autonomy.
+
 Verified in code:
-- ✅ document-stats: Role filtering at lines 44-67
-- ✅ trending-topics: Role filtering at lines 202-227
-- ✅ recent-activity: Role filtering at lines 302-306
-- ✅ search-analytics: Admin-only check at line 361
-- ✅ user-activity: Admin-only check at line 450
-- ✅ institution-stats: Admin-only check at line 524
-- ✅ dashboard-summary: Role filtering at lines 602-644
+- ✅ document-stats: Role filtering with MoE limited access
+- ✅ trending-topics: Role filtering with MoE limited access
+- ✅ recent-activity: Role filtering
+- ✅ search-analytics: Admin-only check
+- ✅ user-activity: Admin-only check
+- ✅ institution-stats: Admin-only check
+- ✅ dashboard-summary: Role filtering with MoE limited access
 
 ---
 
@@ -66,13 +80,15 @@ elif current_user.role == "university_admin":
 
 | Endpoint | Student | Uni Admin | MoE Admin | Developer |
 |----------|---------|-----------|-----------|-----------|
-| dashboard-summary | Public docs only | Public + Institution | All docs | All docs |
-| document-stats | Public docs only | Public + Institution | All docs | All docs |
-| trending-topics | Public docs only | Public + Institution | All docs | All docs |
+| dashboard-summary | Approved public only | Public + Institution | Public + Pending + Own | All docs |
+| document-stats | Approved public only | Public + Institution | Public + Pending + Own | All docs |
+| trending-topics | Approved public only | Public + Institution | Public + Pending + Own | All docs |
 | recent-activity | Own activity | Own activity | All activity | All activity |
 | search-analytics | ❌ Forbidden | ❌ Forbidden | ✅ Allowed | ✅ Allowed |
 | user-activity | ❌ Forbidden | ❌ Forbidden | ✅ Allowed | ✅ Allowed |
 | institution-stats | ❌ Forbidden | ❌ Forbidden | ✅ Allowed | ✅ Allowed |
+
+**Note:** MoE Admin has LIMITED access to respect institutional autonomy. They see public docs, pending approvals, their institution's docs, and docs they uploaded.
 
 **No user sees documents they shouldn't!**
 
