@@ -94,6 +94,7 @@ class PGVectorStore:
         top_k: int = 5,
         user_role: Optional[str] = None,
         user_institution_id: Optional[int] = None,
+        document_id_filter: Optional[int] = None,
         db: Optional[Session] = None
     ) -> List[Dict]:
         """
@@ -104,6 +105,7 @@ class PGVectorStore:
             top_k: Number of results to return
             user_role: User's role for filtering
             user_institution_id: User's institution ID
+            document_id_filter: Optional document ID to search within only
             db: Optional database session
         
         Returns:
@@ -117,6 +119,10 @@ class PGVectorStore:
         try:
             # Build base query
             query = db.query(DocumentEmbedding)
+            
+            # Filter by specific document if provided
+            if document_id_filter is not None:
+                query = query.filter(DocumentEmbedding.document_id == document_id_filter)
             
             # Apply role-based filtering
             if user_role:

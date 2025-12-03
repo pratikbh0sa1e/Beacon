@@ -392,6 +392,63 @@ class DocumentEmbedding(Base):
     )
 
 
+class DocumentChatMessage(Base):
+    """Messages in document-specific chat rooms"""
+    __tablename__ = "document_chat_messages"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    content = Column(Text, nullable=False)
+    
+    # Threading support
+    parent_message_id = Column(Integer, ForeignKey("document_chat_messages.id", ondelete="SET NULL"), nullable=True, index=True)
+    
+    # Message type: 'user', 'system', 'beacon'
+    message_type = Column(String(20), nullable=False, default="user", index=True)
+    
+    # For beacon responses
+    citations = Column(JSONB, nullable=True)
+    
+    # Mentioned users
+    mentioned_user_ids = Column(ARRAY(Integer), nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    document = relationship("Document", foreign_keys=[document_id])
+    user = relationship("User", foreign_keys=[user_id])
+    parent_message = relationship("DocumentChatMessage", remote_side=[id], foreign_keys=[parent_message_id])
+    replies = relationship("DocumentChatMessage", back_populates="parent_message", foreign_keys=[parent_message_id])
+
+
+class DocumentChatParticipant(Base):
+    """Track active participants in document chat rooms"""
+    __tablename__ = "document_chat_participants"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Activity tracking
+    last_seen = Column(DateTime, default=datetime.utcnow, nullable=False)
+    is_active = Column(Boolean, default=True, nullable=False)
+    
+    # Timestamps
+    joined_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Unique constraint
+    __table_args__ = (
+        UniqueConstraint("document_id", "user_id", name="unique_document_user_participant"),
+    )
+    
+    # Relationships
+    document = relationship("Document", foreign_keys=[document_id])
+    user = relationship("User", foreign_keys=[user_id])
+
+
 def get_db():
     """Database session dependency"""
     db = SessionLocal()

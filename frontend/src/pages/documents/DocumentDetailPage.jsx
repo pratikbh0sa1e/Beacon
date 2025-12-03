@@ -12,6 +12,7 @@ import {
   Send,
   AlertCircle,
   CheckCircle,
+  MessageSquare,
 } from "lucide-react";
 import { documentAPI, bookmarkAPI } from "../../services/api";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -28,6 +29,8 @@ import { formatDateTime } from "../../utils/dateFormat";
 import { toast } from "sonner";
 import { useAuthStore } from "../../stores/authStore";
 import { SecureDocumentViewer } from "../../components/documents/SecureDocumentViewer";
+import { DocumentChatPanel } from "../../components/documents/DocumentChatPanel";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
 
 export const DocumentDetailPage = () => {
   const { id } = useParams();
@@ -179,12 +182,12 @@ export const DocumentDetailPage = () => {
                 docData.approval_status === "approved"
                   ? "bg-green-600"
                   : docData.approval_status === "pending"
-                  ? "bg-yellow-600"
-                  : docData.approval_status === "rejected"
-                  ? "bg-red-600"
-                  : docData.approval_status === "draft"
-                  ? "bg-gray-600"
-                  : "bg-blue-600"
+                    ? "bg-yellow-600"
+                    : docData.approval_status === "rejected"
+                      ? "bg-red-600"
+                      : docData.approval_status === "draft"
+                        ? "bg-gray-600"
+                        : "bg-blue-600"
               }
             >
               {docData.approval_status?.replace("_", " ").toUpperCase()}
@@ -379,65 +382,83 @@ export const DocumentDetailPage = () => {
         </CardContent>
       </Card>
 
-      {/* Preview Card */}
+      {/* Preview & Chat Tabs */}
       <Card className="glass-card border-border/50">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            Document Preview
-            {docData.download_allowed ? (
-              <Badge
-                variant="secondary"
-                className="text-xs bg-green-500/10 text-green-600 border-green-500/20"
-              >
-                ✓ Preview Available
-              </Badge>
-            ) : (
-              <Badge
-                variant="secondary"
-                className="text-xs bg-red-500/10 text-red-600 border-red-500/20"
-              >
-                🔒 Protected
-              </Badge>
-            )}
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          {!docData.download_allowed ? (
-            // Protected documents - no preview to prevent circumventing download restrictions
-            <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
-              <div className="text-center p-6 max-w-md">
-                <Shield className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-                <p className="text-muted-foreground font-medium mb-2">
-                  Preview Disabled for Protected Documents
-                </p>
-                <p className="text-sm text-muted-foreground">
-                  This document has been marked as protected by the uploader.
-                  Preview is disabled to prevent unauthorized access. If you
-                  need access, please contact the document owner or your
-                  administrator.
-                </p>
-              </div>
+        <CardContent className="p-0">
+          <Tabs defaultValue="preview" className="w-full">
+            <div className="border-b border-border/50 px-6 pt-6">
+              <TabsList className="grid w-full max-w-md grid-cols-2">
+                <TabsTrigger value="preview" className="flex items-center gap-2">
+                  <Eye className="h-4 w-4" />
+                  Preview
+                </TabsTrigger>
+                <TabsTrigger value="chat" className="flex items-center gap-2">
+                  <MessageSquare className="h-4 w-4" />
+                  Discussion
+                </TabsTrigger>
+              </TabsList>
             </div>
-          ) : docData.s3_url ? (
-            // Downloadable documents - show preview
-            <SecureDocumentViewer
-              url={docData.s3_url}
-              fileType={docData.file_type}
-              userName={user?.name || user?.email}
-            />
-          ) : (
-            <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
-              <div className="text-center p-6">
-                <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
-                <p className="text-muted-foreground font-medium">
-                  Preview not available
-                </p>
-                <p className="text-sm text-muted-foreground mt-2">
-                  File not found in storage.
-                </p>
+
+            <TabsContent value="preview" className="p-6 m-0">
+              <div className="flex items-center gap-2 mb-4">
+                <h3 className="font-semibold">Document Preview</h3>
+                {docData.download_allowed ? (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-green-500/10 text-green-600 border-green-500/20"
+                  >
+                    ✓ Preview Available
+                  </Badge>
+                ) : (
+                  <Badge
+                    variant="secondary"
+                    className="text-xs bg-red-500/10 text-red-600 border-red-500/20"
+                  >
+                    🔒 Protected
+                  </Badge>
+                )}
               </div>
-            </div>
-          )}
+
+              {!docData.download_allowed ? (
+                <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
+                  <div className="text-center p-6 max-w-md">
+                    <Shield className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                    <p className="text-muted-foreground font-medium mb-2">
+                      Preview Disabled for Protected Documents
+                    </p>
+                    <p className="text-sm text-muted-foreground">
+                      This document has been marked as protected by the uploader.
+                      Preview is disabled to prevent unauthorized access. If you
+                      need access, please contact the document owner or your
+                      administrator.
+                    </p>
+                  </div>
+                </div>
+              ) : docData.s3_url ? (
+                <SecureDocumentViewer
+                  url={docData.s3_url}
+                  fileType={docData.file_type}
+                  userName={user?.name || user?.email}
+                />
+              ) : (
+                <div className="aspect-[4/3] bg-muted/50 rounded-lg flex items-center justify-center border border-border/50">
+                  <div className="text-center p-6">
+                    <FileText className="h-16 w-16 mx-auto mb-4 text-muted-foreground/50" />
+                    <p className="text-muted-foreground font-medium">
+                      Preview not available
+                    </p>
+                    <p className="text-sm text-muted-foreground mt-2">
+                      File not found in storage.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="chat" className="p-6 m-0">
+              <DocumentChatPanel documentId={id} />
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
     </div>

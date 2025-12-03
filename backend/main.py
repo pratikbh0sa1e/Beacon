@@ -15,7 +15,8 @@ from backend.routers import (
     data_source_router,
     notification_router,    
     voice_router,
-    insights_router
+    insights_router,
+    document_chat_router
 )
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
@@ -68,6 +69,7 @@ app.include_router(audit_router.router, prefix="/audit", tags=["audit"])
 app.include_router(data_source_router.router, prefix="/data-sources", tags=["data-sources"])
 app.include_router(notification_router.router, prefix="/notifications", tags=["notifications"])
 app.include_router(insights_router.router, tags=["insights"])
+app.include_router(document_chat_router.router, tags=["document-chat"])
 
 @app.get("/")
 async def root():
