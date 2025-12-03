@@ -14,7 +14,8 @@ from backend.routers import (
     audit_router,
     data_source_router,
     notification_router,    
-    voice_router
+    voice_router,
+    insights_router
 )
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
@@ -66,6 +67,7 @@ app.include_router(voice_router.router, tags=["voice"])  # Voice query support
 app.include_router(audit_router.router, prefix="/audit", tags=["audit"])
 app.include_router(data_source_router.router, prefix="/data-sources", tags=["data-sources"])
 app.include_router(notification_router.router, prefix="/notifications", tags=["notifications"])
+app.include_router(insights_router.router, tags=["insights"])
 
 @app.get("/")
 async def root():
@@ -82,7 +84,8 @@ async def root():
             "chat": "/chat",
             "audit": "/audit",
             "data_sources": "/data-sources",
-            "notifications": "/notifications"
+            "notifications": "/notifications",
+            "insights": "/insights"
         },
         "documentation": "/docs"
     }
@@ -92,7 +95,7 @@ async def health_check():
     return {
         "status": "healthy",
         "database": "connected",
-        "services": ["auth", "documents", "chat", "approvals", "data-sources"]
+        "services": ["auth", "documents", "chat", "approvals", "data-sources", "insights"]
     }
 
 @app.on_event("startup")

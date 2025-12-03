@@ -1536,3 +1536,267 @@ async def update_document_status(
         "document_id": document_id,
         "new_status": new_status
     }
+
+
+
+# ==================================================================
+# POLICY COMPARISON ENDPOINT
+# ==================================================================
+
+class CompareRequest(BaseModel):
+    document_ids: List[int]
+    comparison_aspects: Optional[List[str]] = None
+
+
+@router.post("/compare")
+async def compare_documents(
+    request: CompareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Compare multiple policy documents using LLM analysis
+    
+    Args:
+        document_ids: List of 2-5 document IDs to compare
+        comparison_aspects: Optional list of aspects to compare
+    
+    Returns:
+        Structured comparison matrix with extracted information
+    
+    Role-based access:
+    - Users can only compare documents they have access to
+    - Students/Public: Only approved public documents
+    - University Admin: Public + their institution documents
+    - MoE Admin/Developer: All documents
+    """
+    try:
+        # Validate input
+        if not request.document_ids or len(request.document_ids) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 documents required for comparison"
+            )
+        
+        if len(request.document_ids) > 5:
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum 5 documents can be compared at once"
+            )
+        
+        # Fetch documents with role-based filtering
+        documents = []
+        for doc_id in request.document_ids:
+            doc = db.query(Document).filter(Document.id == doc_id).first()
+            
+            if not doc:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Document {doc_id} not found"
+                )
+            
+            # Role-based access control
+            has_access = False
+            
+            if current_user.role in ["developer", "moe_admin"]:
+                # Full access
+                has_access = True
+            
+            elif current_user.role == "university_admin":
+                # Access to public + their institution
+                if doc.visibility_level == "public":
+                    has_access = True
+                elif doc.institution_id == current_user.institution_id:
+                    has_access = True
+            
+            elif current_user.role in ["document_officer", "student", "public_viewer"]:
+                # Access to approved public documents only
+                if doc.approval_status == "approved" and doc.visibility_level == "public":
+                    has_access = True
+                # Students can also see their institution's approved institution_only docs
+                elif (current_user.role == "student" and 
+                      doc.approval_status == "approved" and
+                      doc.visibility_level == "institution_only" and
+                      doc.institution_id == current_user.institution_id):
+                    has_access = True
+            
+            if not has_access:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"You don't have access to document {doc_id}"
+                )
+            
+            # Get metadata
+            metadata = db.query(DocumentMetadata).filter(
+                DocumentMetadata.document_id == doc_id
+            ).first()
+            
+            # Prepare document data
+            doc_data = {
+                "id": doc.id,
+                "title": metadata.title if metadata and metadata.title else doc.filename,
+                "filename": doc.filename,
+                "text": doc.extracted_text or "",
+                "approval_status": doc.approval_status,
+                "visibility_level": doc.visibility_level,
+                "metadata": {
+                    "summary": metadata.summary if metadata else None,
+                    "department": metadata.department if metadata else None,
+                    "document_type": metadata.document_type if metadata else None,
+                    "date_published": metadata.date_published.isoformat() if metadata and metadata.date_published else None
+                }
+            }
+            
+            documents.append(doc_data)
+        
+        # Import comparison tool
+        from Agent.tools.comparison_tools import create_comparison_tool
+        import os
+        
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Google API key not configured"
+            )
+        
+        # Create comparison tool
+        comparison_tool = create_comparison_tool(google_api_key)
+        
+        # Perform comparison
+        result = comparison_tool.compare_policies(
+            documents,
+            request.comparison_aspects
+        )
+        
+        # Log audit trail
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="compare_documents",
+            action_metadata={
+                "document_ids": request.document_ids,
+                "comparison_aspects": request.comparison_aspects,
+                "status": result.get("status", "unknown")
+            }
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Comparison failed: {str(e)}"
+        )
+
+
+@router.post("/compare/conflicts")
+async def detect_conflicts(
+    request: CompareRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Detect conflicts between policy documents
+    
+    Args:
+        document_ids: List of 2-5 document IDs to analyze
+    
+    Returns:
+        List of potential conflicts and contradictions
+    
+    Role-based access: Same as compare endpoint
+    """
+    try:
+        # Validate input
+        if not request.document_ids or len(request.document_ids) < 2:
+            raise HTTPException(
+                status_code=400,
+                detail="At least 2 documents required for conflict detection"
+            )
+        
+        # Fetch documents with role-based filtering (same logic as compare)
+        documents = []
+        for doc_id in request.document_ids:
+            doc = db.query(Document).filter(Document.id == doc_id).first()
+            
+            if not doc:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Document {doc_id} not found"
+                )
+            
+            # Role-based access control
+            has_access = False
+            
+            if current_user.role in ["developer", "moe_admin"]:
+                has_access = True
+            elif current_user.role == "university_admin":
+                if doc.visibility_level == "public" or doc.institution_id == current_user.institution_id:
+                    has_access = True
+            elif current_user.role in ["document_officer", "student", "public_viewer"]:
+                if doc.approval_status == "approved" and doc.visibility_level == "public":
+                    has_access = True
+                elif (current_user.role == "student" and 
+                      doc.approval_status == "approved" and
+                      doc.visibility_level == "institution_only" and
+                      doc.institution_id == current_user.institution_id):
+                    has_access = True
+            
+            if not has_access:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"You don't have access to document {doc_id}"
+                )
+            
+            # Prepare document data
+            doc_data = {
+                "id": doc.id,
+                "title": doc.filename,
+                "text": doc.extracted_text or ""
+            }
+            
+            documents.append(doc_data)
+        
+        # Import comparison tool
+        from Agent.tools.comparison_tools import create_comparison_tool
+        import os
+        
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Google API key not configured"
+            )
+        
+        # Create comparison tool
+        comparison_tool = create_comparison_tool(google_api_key)
+        
+        # Detect conflicts
+        result = comparison_tool.find_conflicts(documents)
+        
+        # Log audit trail
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="detect_conflicts",
+            action_metadata={
+                "document_ids": request.document_ids,
+                "conflicts_found": len(result.get("conflicts", [])),
+                "status": result.get("status", "unknown")
+            }
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Conflict detection failed: {str(e)}"
+        )
