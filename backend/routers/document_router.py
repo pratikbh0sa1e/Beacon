@@ -1849,3 +1849,485 @@ async def detect_conflicts(
             status_code=500,
             detail=f"Conflict detection failed: {str(e)}"
         )
+
+
+
+# ==================================================================
+# COMPLIANCE CHECKING ENDPOINT
+# ==================================================================
+
+class ComplianceRequest(BaseModel):
+    checklist: List[str]
+    strict_mode: Optional[bool] = False
+
+
+@router.post("/{document_id}/check-compliance")
+async def check_document_compliance(
+    document_id: int,
+    request: ComplianceRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Check if document complies with given criteria
+    
+    Args:
+        document_id: ID of document to check
+        checklist: List of compliance criteria (max 20)
+        strict_mode: If true, requires explicit evidence
+    
+    Returns:
+        Compliance report with pass/fail for each criterion and evidence
+    
+    Role-based access (respects institutional autonomy):
+    - Developer: Can check any document
+    - MoE Admin: Can check public + pending + their institution + their uploads
+    - University Admin: Can check public + their institution
+    - Document Officer: Can check public + their institution
+    - Student: Can check approved public + their institution's approved institution_only
+    - Public Viewer: Can check approved public documents only
+    
+    Users can only check compliance of documents they have access to.
+    """
+    try:
+        # Validate input
+        if not request.checklist:
+            raise HTTPException(
+                status_code=400,
+                detail="Checklist cannot be empty"
+            )
+        
+        if len(request.checklist) > 20:
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum 20 checklist items allowed"
+            )
+        
+        # Fetch document
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        
+        if not doc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Document {document_id} not found"
+            )
+        
+        # Role-based access control (matching existing document access rules)
+        has_access = False
+        
+        # 1. DEVELOPER: Full access
+        if current_user.role == "developer":
+            has_access = True
+        
+        # 2. MOE ADMIN: Limited access (respects institutional autonomy)
+        elif current_user.role == "moe_admin":
+            if (doc.visibility_level == "public" or
+                doc.approval_status == "pending" or
+                doc.institution_id == current_user.institution_id or
+                doc.uploader_id == current_user.id):
+                has_access = True
+        
+        # 3. UNIVERSITY ADMIN: Public + their institution
+        elif current_user.role == "university_admin":
+            if (doc.visibility_level == "public" or
+                doc.institution_id == current_user.institution_id):
+                has_access = True
+        
+        # 4. DOCUMENT OFFICER: Public + their institution
+        elif current_user.role == "document_officer":
+            if (doc.visibility_level == "public" or
+                doc.institution_id == current_user.institution_id):
+                has_access = True
+        
+        # 5. STUDENT: Approved public + their institution's approved institution_only
+        elif current_user.role == "student":
+            if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                has_access = True
+            elif (doc.approval_status == "approved" and
+                  doc.visibility_level == "institution_only" and
+                  doc.institution_id == current_user.institution_id):
+                has_access = True
+        
+        # 6. PUBLIC VIEWER: Only approved public documents
+        elif current_user.role == "public_viewer":
+            if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                has_access = True
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You don't have access to document {document_id}"
+            )
+        
+        # Get metadata
+        metadata = db.query(DocumentMetadata).filter(
+            DocumentMetadata.document_id == document_id
+        ).first()
+        
+        # Prepare document data
+        doc_data = {
+            "id": doc.id,
+            "title": metadata.title if metadata and metadata.title else doc.filename,
+            "filename": doc.filename,
+            "text": doc.extracted_text or "",
+            "approval_status": doc.approval_status,
+            "visibility_level": doc.visibility_level,
+            "metadata": {
+                "summary": metadata.summary if metadata else None,
+                "department": metadata.department if metadata else None,
+                "document_type": metadata.document_type if metadata else None,
+                "date_published": metadata.date_published.isoformat() if metadata and metadata.date_published else None
+            }
+        }
+        
+        # Import compliance checker
+        from Agent.tools.compliance_tools import create_compliance_checker
+        import os
+        
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Google API key not configured"
+            )
+        
+        # Create compliance checker
+        compliance_checker = create_compliance_checker(google_api_key)
+        
+        # Perform compliance check
+        result = compliance_checker.check_compliance(
+            doc_data,
+            request.checklist,
+            request.strict_mode
+        )
+        
+        # Log audit trail
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="check_compliance",
+            action_metadata={
+                "document_id": document_id,
+                "checklist_items": len(request.checklist),
+                "strict_mode": request.strict_mode,
+                "status": result.get("status", "unknown"),
+                "compliance_status": result.get("overall_compliance", {}).get("status", "unknown")
+            }
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Compliance check failed: {str(e)}"
+        )
+
+
+@router.post("/{document_id}/compliance-report")
+async def generate_compliance_report(
+    document_id: int,
+    request: ComplianceRequest,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Generate detailed compliance report with recommendations
+    
+    Args:
+        document_id: ID of document to analyze
+        checklist: List of compliance criteria
+        strict_mode: If true, requires explicit evidence
+    
+    Returns:
+        Detailed compliance report with actionable recommendations
+    
+    Role-based access: Same as check-compliance endpoint
+    """
+    try:
+        # Validate input
+        if not request.checklist:
+            raise HTTPException(
+                status_code=400,
+                detail="Checklist cannot be empty"
+            )
+        
+        # Fetch document with role-based access control
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        
+        if not doc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Document {document_id} not found"
+            )
+        
+        # Role-based access control (same as check-compliance)
+        has_access = False
+        
+        if current_user.role == "developer":
+            has_access = True
+        elif current_user.role == "moe_admin":
+            if (doc.visibility_level == "public" or
+                doc.approval_status == "pending" or
+                doc.institution_id == current_user.institution_id or
+                doc.uploader_id == current_user.id):
+                has_access = True
+        elif current_user.role == "university_admin":
+            if (doc.visibility_level == "public" or
+                doc.institution_id == current_user.institution_id):
+                has_access = True
+        elif current_user.role == "document_officer":
+            if (doc.visibility_level == "public" or
+                doc.institution_id == current_user.institution_id):
+                has_access = True
+        elif current_user.role == "student":
+            if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                has_access = True
+            elif (doc.approval_status == "approved" and
+                  doc.visibility_level == "institution_only" and
+                  doc.institution_id == current_user.institution_id):
+                has_access = True
+        elif current_user.role == "public_viewer":
+            if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                has_access = True
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You don't have access to document {document_id}"
+            )
+        
+        # Get metadata
+        metadata = db.query(DocumentMetadata).filter(
+            DocumentMetadata.document_id == document_id
+        ).first()
+        
+        # Prepare document data
+        doc_data = {
+            "id": doc.id,
+            "title": metadata.title if metadata and metadata.title else doc.filename,
+            "filename": doc.filename,
+            "text": doc.extracted_text or "",
+            "metadata": {
+                "summary": metadata.summary if metadata else None,
+                "department": metadata.department if metadata else None,
+                "document_type": metadata.document_type if metadata else None
+            }
+        }
+        
+        # Import compliance checker
+        from Agent.tools.compliance_tools import create_compliance_checker
+        import os
+        
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Google API key not configured"
+            )
+        
+        # Create compliance checker
+        compliance_checker = create_compliance_checker(google_api_key)
+        
+        # Generate detailed report
+        result = compliance_checker.generate_compliance_report(
+            doc_data,
+            request.checklist
+        )
+        
+        # Log audit trail
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="generate_compliance_report",
+            action_metadata={
+                "document_id": document_id,
+                "checklist_items": len(request.checklist),
+                "status": result.get("status", "unknown")
+            }
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Report generation failed: {str(e)}"
+        )
+
+
+
+# ==================================================================
+# CONFLICT DETECTION ENDPOINT
+# ==================================================================
+
+@router.get("/{document_id}/conflicts")
+async def detect_document_conflicts(
+    document_id: int,
+    max_candidates: int = 3,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """
+    Detect conflicts between this document and other documents
+    
+    Uses lazy embedding strategy:
+    1. Search by metadata to find potentially related documents
+    2. Embed only top 3 candidates (if not already embedded)
+    3. Use semantic search + LLM to detect actual conflicts
+    
+    Args:
+        document_id: ID of document to check for conflicts
+        max_candidates: Maximum number of documents to check (default: 3, max: 10)
+    
+    Returns:
+        List of potential conflicts with severity and recommendations
+    
+    Role-based access (respects institutional autonomy):
+    - Developer: Can check any document
+    - MoE Admin: Can check public + pending + their institution + their uploads
+    - University Admin: Can check public + their institution
+    - Document Officer: Can check public + their institution
+    - Student: Can check approved public + their institution's approved institution_only
+    - Public Viewer: Can check approved public documents only
+    
+    Users can only check conflicts for documents they have access to.
+    """
+    try:
+        # Validate input
+        if max_candidates > 10:
+            raise HTTPException(
+                status_code=400,
+                detail="Maximum 10 candidates allowed"
+            )
+        
+        # Fetch document
+        doc = db.query(Document).filter(Document.id == document_id).first()
+        
+        if not doc:
+            raise HTTPException(
+                status_code=404,
+                detail=f"Document {document_id} not found"
+            )
+        
+        # Role-based access control (matching existing document access rules)
+        has_access = False
+        
+        # 1. DEVELOPER: Full access
+        if current_user.role == "developer":
+            has_access = True
+        
+        # 2. MOE ADMIN: Limited access (respects institutional autonomy)
+        elif current_user.role == "moe_admin":
+            if (doc.visibility_level == "public" or
+                doc.approval_status == "pending" or
+                doc.institution_id == current_user.institution_id or
+                doc.uploader_id == current_user.id):
+                has_access = True
+        
+        # 3. UNIVERSITY ADMIN: Public + their institution
+        elif current_user.role == "university_admin":
+            if (doc.visibility_level == "public" or
+                doc.institution_id == current_user.institution_id):
+                has_access = True
+        
+        # 4. DOCUMENT OFFICER: Public + their institution
+        elif current_user.role == "document_officer":
+            if (doc.visibility_level == "public" or
+                doc.institution_id == current_user.institution_id):
+                has_access = True
+        
+        # 5. STUDENT: Approved public + their institution's approved institution_only
+        elif current_user.role == "student":
+            if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                has_access = True
+            elif (doc.approval_status == "approved" and
+                  doc.visibility_level == "institution_only" and
+                  doc.institution_id == current_user.institution_id):
+                has_access = True
+        
+        # 6. PUBLIC VIEWER: Only approved public documents
+        elif current_user.role == "public_viewer":
+            if (doc.approval_status == "approved" and doc.visibility_level == "public"):
+                has_access = True
+        
+        if not has_access:
+            raise HTTPException(
+                status_code=403,
+                detail=f"You don't have access to document {document_id}"
+            )
+        
+        # Get metadata
+        metadata = db.query(DocumentMetadata).filter(
+            DocumentMetadata.document_id == document_id
+        ).first()
+        
+        # Prepare document data
+        doc_data = {
+            "id": doc.id,
+            "title": metadata.title if metadata and metadata.title else doc.filename,
+            "filename": doc.filename,
+            "text": doc.extracted_text or "",
+            "approval_status": doc.approval_status,
+            "visibility_level": doc.visibility_level,
+            "metadata": {
+                "summary": metadata.summary if metadata else None,
+                "department": metadata.department if metadata else None,
+                "document_type": metadata.document_type if metadata else None,
+                "keywords": metadata.keywords if metadata else [],
+                "date_published": metadata.date_published.isoformat() if metadata and metadata.date_published else None
+            }
+        }
+        
+        # Import conflict detector
+        from Agent.tools.conflict_detection import create_conflict_detector
+        import os
+        
+        google_api_key = os.getenv("GOOGLE_API_KEY")
+        if not google_api_key:
+            raise HTTPException(
+                status_code=500,
+                detail="Google API key not configured"
+            )
+        
+        # Create conflict detector
+        conflict_detector = create_conflict_detector(google_api_key)
+        
+        # Detect conflicts
+        result = conflict_detector.detect_conflicts(
+            doc_data,
+            db,
+            current_user.role,
+            current_user.institution_id,
+            max_candidates
+        )
+        
+        # Log audit trail
+        audit_log = AuditLog(
+            user_id=current_user.id,
+            action="detect_conflicts",
+            action_metadata={
+                "document_id": document_id,
+                "max_candidates": max_candidates,
+                "conflicts_found": len(result.get("conflicts", [])),
+                "status": result.get("status", "unknown")
+            }
+        )
+        db.add(audit_log)
+        db.commit()
+        
+        return result
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Conflict detection failed: {str(e)}"
+        )
