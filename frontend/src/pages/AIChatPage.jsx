@@ -70,11 +70,11 @@ const getApprovalStatusIcon = (status) => {
 const Message = ({ message, isUser, onCitationClick }) => {
   const [showAllCitations, setShowAllCitations] = useState(false);
   const MAX_VISIBLE_CITATIONS = 3;
-  
+
   const citations = message.citations || [];
   const hasManyCitations = citations.length > MAX_VISIBLE_CITATIONS;
-  const visibleCitations = showAllCitations 
-    ? citations 
+  const visibleCitations = showAllCitations
+    ? citations
     : citations.slice(0, MAX_VISIBLE_CITATIONS);
 
   return (
@@ -115,7 +115,9 @@ const Message = ({ message, isUser, onCitationClick }) => {
                     <ul className="mb-2 ml-4 list-disc text-sm">{children}</ul>
                   ),
                   ol: ({ children }) => (
-                    <ol className="mb-2 ml-4 list-decimal text-sm">{children}</ol>
+                    <ol className="mb-2 ml-4 list-decimal text-sm">
+                      {children}
+                    </ol>
                   ),
                   li: ({ children }) => (
                     <li className="mb-1 text-sm">{children}</li>
@@ -178,7 +180,9 @@ const Message = ({ message, isUser, onCitationClick }) => {
                     </th>
                   ),
                   td: ({ children }) => (
-                    <td className="border border-border px-3 py-2">{children}</td>
+                    <td className="border border-border px-3 py-2">
+                      {children}
+                    </td>
                   ),
                 }}
               >
@@ -194,14 +198,16 @@ const Message = ({ message, isUser, onCitationClick }) => {
               Confidence: {message.confidence}%
             </Badge>
           )}
-          
+
           {citations.length > 0 && (
             <>
               {/* Show visible citation pills */}
               {visibleCitations.map((citation, idx) => {
-                const statusInfo = getApprovalStatusIcon(citation.approval_status);
+                const statusInfo = getApprovalStatusIcon(
+                  citation.approval_status
+                );
                 const StatusIcon = statusInfo?.icon;
-                
+
                 return (
                   <motion.div
                     key={idx}
@@ -213,7 +219,11 @@ const Message = ({ message, isUser, onCitationClick }) => {
                       variant="secondary"
                       className="text-xs cursor-pointer hover:bg-accent transition-colors max-w-[200px] group"
                       onClick={() => onCitationClick(citation.document_id)}
-                      title={`${citation.source}${citation.page_number ? ` - Page ${citation.page_number}` : ''}${statusInfo ? ` - ${statusInfo.title}` : ''}`}
+                      title={`${citation.source}${
+                        citation.page_number
+                          ? ` - Page ${citation.page_number}`
+                          : ""
+                      }${statusInfo ? ` - ${statusInfo.title}` : ""}`}
                     >
                       <FileText className="h-3 w-3 mr-1 flex-shrink-0" />
                       <span className="truncate">
@@ -228,7 +238,7 @@ const Message = ({ message, isUser, onCitationClick }) => {
                       )}
                       {/* Approval Status Icon */}
                       {StatusIcon && (
-                        <StatusIcon 
+                        <StatusIcon
                           className={`h-3 w-3 ml-1 flex-shrink-0 ${statusInfo.className}`}
                           title={statusInfo.title}
                         />
@@ -238,7 +248,7 @@ const Message = ({ message, isUser, onCitationClick }) => {
                   </motion.div>
                 );
               })}
-              
+
               {/* Show all toggle button */}
               {hasManyCitations && (
                 <Button
@@ -280,7 +290,8 @@ export const AIChatPage = () => {
   const [audioChunks, setAudioChunks] = useState([]);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
-  
+  const inputRef = useRef(null);
+
   // Sidebar toggle state with localStorage persistence
   const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
     const saved = localStorage.getItem("chatSidebarOpen");
@@ -326,7 +337,11 @@ export const AIChatPage = () => {
 
   useEffect(() => {
     scrollToBottom();
-  }, [messages]);
+    // Focus input after messages update (after AI response)
+    if (!loading && messages.length > 0) {
+      inputRef.current?.focus();
+    }
+  }, [messages, loading]);
 
   // Send message using chat store
   const handleSend = async () => {
@@ -569,7 +584,9 @@ export const AIChatPage = () => {
                 variant="outline"
                 size="sm"
                 className="flex items-center gap-2"
-                title={isSidebarOpen ? "Hide chat history" : "Show chat history"}
+                title={
+                  isSidebarOpen ? "Hide chat history" : "Show chat history"
+                }
               >
                 <Menu className="h-4 w-4" />
                 <span className="text-xs">
@@ -648,6 +665,7 @@ export const AIChatPage = () => {
             <div className="border-t border-border/40 pt-4">
               <div className="flex gap-2">
                 <Input
+                  ref={inputRef}
                   placeholder="Ask me anything about your documents..."
                   value={input}
                   onChange={(e) => setInput(e.target.value)}

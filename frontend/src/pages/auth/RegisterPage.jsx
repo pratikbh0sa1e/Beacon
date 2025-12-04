@@ -1,8 +1,9 @@
 import React, { useState, useEffect } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
-import { Mail, Lock, User, Building2, UserPlus } from "lucide-react";
+import { Mail, Lock, User, Building2, UserPlus, Moon, Sun } from "lucide-react";
 import { authAPI, institutionAPI } from "../../services/api";
+import { useThemeStore } from "../../stores/themeStore";
 import { Button } from "../../components/ui/button";
 import { Input } from "../../components/ui/input";
 import { Label } from "../../components/ui/label";
@@ -24,6 +25,7 @@ import {
 import { toast } from "sonner";
 
 export const RegisterPage = () => {
+  const { theme, toggleTheme } = useThemeStore();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
@@ -190,6 +192,22 @@ export const RegisterPage = () => {
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden">
+      {/* Theme Toggle Button */}
+      <div className="absolute top-4 right-4 z-20">
+        <Button
+          variant="outline"
+          size="icon"
+          onClick={toggleTheme}
+          className="glass-card"
+        >
+          {theme === "dark" ? (
+            <Sun className="h-5 w-5" />
+          ) : (
+            <Moon className="h-5 w-5" />
+          )}
+        </Button>
+      </div>
+
       <div className="absolute inset-0 bg-gradient-to-br from-background via-secondary to-background" />
       <div
         className="absolute inset-0"

@@ -3,8 +3,8 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-const SESSION_TIMEOUT = 30 * 60 * 1000; // 30 minutes in milliseconds
-const WARNING_TIME = 5 * 60 * 1000; // 5 minutes before timeout
+const SESSION_TIMEOUT = 24 * 60 * 60 * 1000; // 24 hours in milliseconds
+const WARNING_TIME = 10 * 60 * 1000; // 10 minutes before timeout
 
 // Helper function to decode JWT
 const decodeToken = (token) => {

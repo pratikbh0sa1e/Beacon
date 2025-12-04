@@ -229,7 +229,7 @@ export const BookmarksPage = () => {
         <div
           className={
             viewMode === "grid"
-              ? "grid gap-6 md:grid-cols-2 lg:grid-cols-3"
+              ? "grid gap-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-3"
               : "space-y-4"
           }
         >

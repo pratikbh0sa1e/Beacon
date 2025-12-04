@@ -146,7 +146,7 @@ export const AnalyticsPage = () => {
       />
 
       {/* Overview Stats */}
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 lg:grid-cols-4">
         <motion.div
           initial={{ opacity: 0, y: 20 }}
           animate={{ opacity: 1, y: 0 }}
@@ -233,7 +233,7 @@ export const AnalyticsPage = () => {
       </div>
 
       {/* Activity Summary */}
-      <div className="grid gap-6 lg:grid-cols-2">
+      <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
         {/* Action Breakdown */}
         <Card className="glass-card border-border/50">
           <CardHeader>
@@ -363,7 +363,7 @@ export const AnalyticsPage = () => {
             <CardTitle>Period Summary</CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
               <div className="p-4 rounded-lg bg-secondary/50">
                 <p className="text-sm text-muted-foreground mb-1">
                   Total Actions

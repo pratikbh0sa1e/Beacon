@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useCallback } from "react";
 import { motion } from "framer-motion";
 import {
   Database,
@@ -42,6 +42,38 @@ import {
 } from "../../utils/errorHandlers";
 
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
+
+// FormField component defined outside to prevent re-creation
+const FormField = ({ id, label, tooltip, error, children }) => (
+  <div className="space-y-2">
+    <div className="flex items-center gap-2">
+      <Label htmlFor={id}>{label}</Label>
+      {tooltip && (
+        <TooltipProvider>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
+            </TooltipTrigger>
+            <TooltipContent className="max-w-xs">
+              <p>{tooltip}</p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      )}
+    </div>
+    {children}
+    {error && (
+      <motion.p
+        initial={{ opacity: 0, y: -5 }}
+        animate={{ opacity: 1, y: 0 }}
+        className="text-xs text-destructive flex items-center gap-1"
+      >
+        <AlertCircle className="h-3 w-3" />
+        {error}
+      </motion.p>
+    )}
+  </div>
+);
 
 export const DataSourceRequestPage = () => {
   const { user } = useAuthStore();
@@ -127,10 +159,11 @@ export const DataSourceRequestPage = () => {
     return errors;
   };
 
-  const handleChange = (field, value) => {
+  const handleChange = useCallback((field, value) => {
+    // Update form data
     setFormData((prev) => ({ ...prev, [field]: value }));
 
-    // Real-time validation
+    // Real-time validation (React 18 will batch these updates automatically)
     const fieldErrors = validateField(field, value);
     setValidationErrors((prev) => {
       const newErrors = { ...prev };
@@ -141,7 +174,7 @@ export const DataSourceRequestPage = () => {
       }
       return newErrors;
     });
-  };
+  }, []);
 
   const handleTestConnection = async () => {
     setTesting(true);
@@ -251,37 +284,6 @@ export const DataSourceRequestPage = () => {
 
   const isUniversityAdmin = user?.role === "university_admin";
 
-  const FormField = ({ id, label, tooltip, error, children }) => (
-    <div className="space-y-2">
-      <div className="flex items-center gap-2">
-        <Label htmlFor={id}>{label}</Label>
-        {tooltip && (
-          <TooltipProvider>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Info className="h-3.5 w-3.5 text-muted-foreground cursor-help" />
-              </TooltipTrigger>
-              <TooltipContent className="max-w-xs">
-                <p>{tooltip}</p>
-              </TooltipContent>
-            </Tooltip>
-          </TooltipProvider>
-        )}
-      </div>
-      {children}
-      {error && (
-        <motion.p
-          initial={{ opacity: 0, y: -5 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="text-xs text-destructive flex items-center gap-1"
-        >
-          <AlertCircle className="h-3 w-3" />
-          {error}
-        </motion.p>
-      )}
-    </div>
-  );
-
   return (
     <div className="space-y-6">
       <PageHeader
@@ -291,7 +293,7 @@ export const DataSourceRequestPage = () => {
       />
 
       <form onSubmit={handleSubmit}>
-        <div className="grid gap-6 md:grid-cols-2">
+        <div className="grid gap-6 grid-cols-1 lg:grid-cols-2">
           {/* Basic Information */}
           <Card className="glass-card border-border/50 md:col-span-2">
             <CardHeader>

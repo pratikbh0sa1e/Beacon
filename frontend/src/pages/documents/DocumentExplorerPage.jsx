@@ -269,7 +269,10 @@ export const DocumentExplorerPage = () => {
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05 }}
                 >
-                  <Card className="glass-card border-border/50 hover:border-primary/50 h-full flex flex-col transition-all duration-300 hover:shadow-lg">
+                  <Card
+                    className="glass-card border-border/50 hover:border-primary/50 h-full flex flex-col transition-all duration-300 hover:shadow-lg cursor-pointer"
+                    onClick={() => navigate(`/documents/${doc.id}`)}
+                  >
                     <CardContent className="p-6 flex flex-col flex-1">
                       <div className="flex items-start justify-between mb-4">
                         <div className="flex flex-col gap-2">
@@ -370,7 +373,10 @@ export const DocumentExplorerPage = () => {
                           variant="outline"
                           size="sm"
                           className="flex-1"
-                          onClick={() => navigate(`/documents/${doc.id}`)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            navigate(`/documents/${doc.id}`);
+                          }}
                         >
                           <Eye className="h-4 w-4 mr-2" />
                           View
@@ -380,7 +386,10 @@ export const DocumentExplorerPage = () => {
                             variant="outline"
                             size="sm"
                             className="flex-1"
-                            onClick={() => handleDownload(doc.id, doc.title)}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleDownload(doc.id, doc.title);
+                            }}
                           >
                             <Download className="h-4 w-4 mr-2" />
                             Download

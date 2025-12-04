@@ -201,7 +201,7 @@ export const DocumentApprovalsPage = () => {
       />
 
       {/* Stats Cards */}
-      <div className="grid gap-4 md:grid-cols-3">
+      <div className="grid gap-4 grid-cols-1 sm:grid-cols-2 md:grid-cols-3">
         <Card className="glass-card border-border/50">
           <CardContent className="p-6">
             <div className="flex items-center gap-4">
@@ -260,7 +260,7 @@ export const DocumentApprovalsPage = () => {
         onValueChange={setActiveTab}
         className="space-y-6"
       >
-        <TabsList className="grid w-full grid-cols-3">
+        <TabsList className="grid w-full grid-cols-3 max-w-md">
           <TabsTrigger value="pending" className="flex items-center gap-2">
             <Clock className="h-4 w-4" />
             Pending

@@ -242,150 +242,161 @@ export const UserManagementPage = () => {
 
       <Card className="glass-card border-border/50">
         <CardContent className="p-0">
-          <div className="overflow-x-auto">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Institution</TableHead>
-                  <TableHead>Status</TableHead>
-                  <TableHead>Registered</TableHead>
-                  <TableHead className="text-right">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {visibleUsers.map((user, index) => (
-                  <motion.tr
-                    key={user.id}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: index * 0.05 }}
-                    className="border-border/40"
-                  >
-                    <TableCell className="font-medium">{user.email}</TableCell>
-                    <TableCell>
-                      {user.role === "developer" ? (
-                        <Badge variant="secondary" className="font-semibold">
-                          Developer (Protected)
-                        </Badge>
-                      ) : canChangeRole(user) ? (
-                        <Select
-                          value={user.role}
-                          onValueChange={(value) =>
-                            handleRoleChange(user.id, value)
-                          }
-                        >
-                          <SelectTrigger className="w-48">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {getAssignableRoles(user).map((role) => (
-                              <SelectItem key={role} value={role}>
-                                {ROLE_DISPLAY_NAMES[role]}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      ) : (
-                        <Badge variant="outline">
-                          {ROLE_DISPLAY_NAMES[user.role]}
-                        </Badge>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      {user.institution?.name || (
-                        <span className="text-muted-foreground">None</span>
-                      )}
-                    </TableCell>
-                    <TableCell>
-                      <Badge variant={user.approved ? "default" : "outline"}>
-                        {user.approved ? "Approved" : "Pending"}
-                      </Badge>
-                    </TableCell>
-                    <TableCell className="text-sm text-muted-foreground">
-                      {formatDateTime(user.created_at)}
-                    </TableCell>
-                    <TableCell className="text-right">
-                      <div className="flex justify-end gap-2">
-                        {!canManageUser(user) ? (
-                          <Badge variant="outline" className="text-xs">
-                            {user.role === "developer"
-                              ? "Protected"
-                              : "No Access"}
+          <div className="overflow-x-auto -mx-4 sm:mx-0">
+            <div className="inline-block min-w-full align-middle">
+              <div className="overflow-hidden">
+                <Table className="min-w-[800px]">
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Institution</TableHead>
+                      <TableHead>Status</TableHead>
+                      <TableHead>Registered</TableHead>
+                      <TableHead className="text-right">Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {visibleUsers.map((user, index) => (
+                      <motion.tr
+                        key={user.id}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.05 }}
+                        className="border-border/40"
+                      >
+                        <TableCell className="font-medium">
+                          {user.email}
+                        </TableCell>
+                        <TableCell>
+                          {user.role === "developer" ? (
+                            <Badge
+                              variant="secondary"
+                              className="font-semibold"
+                            >
+                              Developer (Protected)
+                            </Badge>
+                          ) : canChangeRole(user) ? (
+                            <Select
+                              value={user.role}
+                              onValueChange={(value) =>
+                                handleRoleChange(user.id, value)
+                              }
+                            >
+                              <SelectTrigger className="w-48">
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                {getAssignableRoles(user).map((role) => (
+                                  <SelectItem key={role} value={role}>
+                                    {ROLE_DISPLAY_NAMES[role]}
+                                  </SelectItem>
+                                ))}
+                              </SelectContent>
+                            </Select>
+                          ) : (
+                            <Badge variant="outline">
+                              {ROLE_DISPLAY_NAMES[user.role]}
+                            </Badge>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          {user.institution?.name || (
+                            <span className="text-muted-foreground">None</span>
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Badge
+                            variant={user.approved ? "default" : "outline"}
+                          >
+                            {user.approved ? "Approved" : "Pending"}
                           </Badge>
-                        ) : !user.approved ? (
-                          <>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setActionDialog({
-                                  open: true,
-                                  user,
-                                  action: "approve",
-                                })
-                              }
-                            >
-                              <Check className="h-4 w-4" />
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() =>
-                                setActionDialog({
-                                  open: true,
-                                  user,
-                                  action: "reject",
-                                })
-                              }
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </>
-                        ) : (
-                          <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                              <Button size="sm" variant="outline">
-                                <MoreVertical className="h-4 w-4" />
-                              </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="end">
-                              <DropdownMenuItem
-                                onClick={() =>
-                                  setActionDialog({
-                                    open: true,
-                                    user,
-                                    action: "revoke",
-                                  })
-                                }
-                              >
-                                <ShieldOff className="h-4 w-4 mr-2" />
-                                Revoke Approval
-                              </DropdownMenuItem>
-                              <DropdownMenuSeparator />
-                              <DropdownMenuItem
-                                className="text-destructive"
-                                onClick={() =>
-                                  setActionDialog({
-                                    open: true,
-                                    user,
-                                    action: "delete",
-                                  })
-                                }
-                              >
-                                <Trash2 className="h-4 w-4 mr-2" />
-                                Delete User
-                              </DropdownMenuItem>
-                            </DropdownMenuContent>
-                          </DropdownMenu>
-                        )}
-                      </div>
-                    </TableCell>
-                  </motion.tr>
-                ))}
-              </TableBody>
-            </Table>
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {formatDateTime(user.created_at)}
+                        </TableCell>
+                        <TableCell className="text-right">
+                          <div className="flex justify-end gap-2">
+                            {!canManageUser(user) ? (
+                              <Badge variant="outline" className="text-xs">
+                                {user.role === "developer"
+                                  ? "Protected"
+                                  : "No Access"}
+                              </Badge>
+                            ) : !user.approved ? (
+                              <>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setActionDialog({
+                                      open: true,
+                                      user,
+                                      action: "approve",
+                                    })
+                                  }
+                                >
+                                  <Check className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                  size="sm"
+                                  variant="outline"
+                                  onClick={() =>
+                                    setActionDialog({
+                                      open: true,
+                                      user,
+                                      action: "reject",
+                                    })
+                                  }
+                                >
+                                  <X className="h-4 w-4" />
+                                </Button>
+                              </>
+                            ) : (
+                              <DropdownMenu>
+                                <DropdownMenuTrigger asChild>
+                                  <Button size="sm" variant="outline">
+                                    <MoreVertical className="h-4 w-4" />
+                                  </Button>
+                                </DropdownMenuTrigger>
+                                <DropdownMenuContent align="end">
+                                  <DropdownMenuItem
+                                    onClick={() =>
+                                      setActionDialog({
+                                        open: true,
+                                        user,
+                                        action: "revoke",
+                                      })
+                                    }
+                                  >
+                                    <ShieldOff className="h-4 w-4 mr-2" />
+                                    Revoke Approval
+                                  </DropdownMenuItem>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-destructive"
+                                    onClick={() =>
+                                      setActionDialog({
+                                        open: true,
+                                        user,
+                                        action: "delete",
+                                      })
+                                    }
+                                  >
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete User
+                                  </DropdownMenuItem>
+                                </DropdownMenuContent>
+                              </DropdownMenu>
+                            )}
+                          </div>
+                        </TableCell>
+                      </motion.tr>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </div>
         </CardContent>
       </Card>
