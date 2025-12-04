@@ -10,6 +10,18 @@ from backend.routers.auth_router import get_current_user
 
 router = APIRouter( tags=["user-management"])
 
+# Try to import caching decorator
+try:
+    from fastapi_cache.decorator import cache
+    CACHE_AVAILABLE = True
+except ImportError:
+    # Fallback no-op decorator if cache not installed
+    def cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    CACHE_AVAILABLE = False
+
 
 class UserListResponse(BaseModel):
     id: int
@@ -69,10 +81,13 @@ def log_audit(db: Session, user_id: int, action: str, metadata: dict):
 
 
 @router.get("/list", response_model=List[UserListResponse])
+@cache(expire=60)  # Cache for 1 minute - users don't change frequently
 async def list_users(
     role: Optional[str] = Query(None, description="Filter by role"),
     approved: Optional[bool] = Query(None, description="Filter by approval status"),
     institution_id: Optional[int] = Query(None, description="Filter by institution"),
+    limit: int = Query(100, le=1000, description="Max results (default 100, max 1000)"),
+    offset: int = Query(0, description="Pagination offset"),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -112,7 +127,8 @@ async def list_users(
     if institution_id and current_user.role in ["developer", "ministry_admin"]:
         query = query.filter(User.institution_id == institution_id)
     
-    users = query.order_by(User.created_at.desc()).all()
+    # Apply pagination
+    users = query.order_by(User.created_at.desc()).limit(limit).offset(offset).all()
     return users
 
 

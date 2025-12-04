@@ -17,6 +17,18 @@ from Agent.metadata.extractor import MetadataExtractor
 
 router = APIRouter(tags=["documents"])
 
+# Try to import caching decorator
+try:
+    from fastapi_cache.decorator import cache
+    CACHE_AVAILABLE = True
+except ImportError:
+    # Fallback no-op decorator if cache not installed
+    def cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    CACHE_AVAILABLE = False
+
 UPLOAD_DIR = "backend/files"
 os.makedirs(UPLOAD_DIR, exist_ok=True)
 
@@ -41,36 +53,7 @@ def sanitize_filename(filename: str) -> str:
     safe_name = re.sub(r'_+', '_', safe_name)
     return f"{safe_name}{ext}"
 
-# def extract_metadata_background(document_id: int, text: str, filename: str, db_session):
-#     """Background task to extract metadata"""
-#     try:
-#         print(f"Extracting metadata for doc {document_id}...")
-#         metadata = metadata_extractor.extract_metadata(text, filename)
-        
-#         # Create or update metadata record
-#         doc_metadata = DocumentMetadata(
-#             document_id=document_id,
-#             title=metadata.get('title'),
-#             department=metadata.get('department'),
-#             document_type=metadata.get('document_type'),
-#             date_published=metadata.get('date_published'),
-#             keywords=metadata.get('keywords'),
-#             summary=metadata.get('summary'),
-#             key_topics=metadata.get('key_topics'),
-#             entities=metadata.get('entities'),
-#             bm25_keywords=metadata.get('bm25_keywords'),
-#             text_length=metadata.get('text_length'),
-#             embedding_status='uploaded',
-#             metadata_status='ready'
-#         )
-        
-#         db_session.add(doc_metadata)
-#         db_session.commit()
-#         print(f"Metadata extracted for doc {document_id}: {metadata.get('title')}")
-        
-#     except Exception as e:
-#         print(f"Error extracting metadata for doc {document_id}: {str(e)}")
-#         db_session.rollback()
+
 
 def extract_metadata_background(document_id: int, text: str, filename: str, db_session):
     """
@@ -127,232 +110,6 @@ def extract_metadata_background(document_id: int, text: str, filename: str, db_s
         print(f"Error in background extraction for doc {document_id}: {str(e)}")
         db_session.rollback()
 
-
-# @router.post("/upload")
-# async def upload_documents(
-#     # files: List[UploadFile] = File(...),
-#     file: UploadFile = File(...),
-#     background_tasks: BackgroundTasks = None,
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user),
-#     source_department: str = "Unknown"
-# ):
-#     """
-#     Upload documents (PDF, DOCX, JPEG, PNG), extract text, 
-#     store in Supabase S3 and save metadata to database
-#     """
-#     results = []
-    
-#     for file in files:
-#         try:
-#             # Validate file type
-#             file_ext = file.filename.split(".")[-1].lower()
-#             if file_ext not in ["pdf", "docx", "jpeg", "jpg", "png"]:
-#                 results.append({
-#                     "filename": file.filename,
-#                     "status": "error",
-#                     "message": f"Unsupported file type: {file_ext}"
-#                 })
-#                 continue
-            
-#             # Save file locally with sanitized filename
-#             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#             safe_filename = sanitize_filename(file.filename)
-#             unique_filename = f"{timestamp}_{safe_filename}"
-#             file_path = os.path.join(UPLOAD_DIR, unique_filename)
-            
-#             with open(file_path, "wb") as buffer:
-#                 shutil.copyfileobj(file.file, buffer)
-            
-#             # Extract text
-#             extracted_text = extract_text(file_path, file_ext)
-            
-#             # Check text size (PostgreSQL text field limit is ~1GB, but let's be safe)
-#             # If text is too large, we'll still store it but log a warning
-#             text_size_mb = len(extracted_text.encode('utf-8')) / (1024 * 1024)
-#             if text_size_mb > 10:  # Warn if over 10MB
-#                 print(f"Warning: Large text extracted ({text_size_mb:.2f}MB) from {file.filename}")
-            
-#             # Upload to Supabase S3
-#             s3_url = upload_to_supabase(file_path, unique_filename)
-            
-#             # Save to database with retry logic
-#             try:
-#                 doc = Document(
-#                     filename=file.filename,
-#                     file_type=file_ext,
-#                     file_path=file_path,
-#                     s3_url=s3_url,
-#                     extracted_text=extracted_text,
-#                     uploader_id=current_user.id, # <--- SAVE USER ID
-#                     institution_id=current_user.institution_id, # <--- SAVE INSTITUTION
-#                     visibility_level="public" # Default visibility
-#                 )
-#                 db.add(doc)
-#                 db.commit()
-#                 db.refresh(doc)
-#             except Exception as db_error:
-#                 db.rollback()
-#                 # Retry once
-#                 try:
-#                     db.add(doc)
-#                     db.commit()
-#                     db.refresh(doc)
-#                 except Exception as retry_error:
-#                     raise Exception(f"Database error after retry: {str(retry_error)}")
-            
-#             # Trigger background metadata extraction
-#             if background_tasks:
-#                 # Create a new session for background task
-#                 from backend.database import SessionLocal
-#                 bg_db = SessionLocal()
-#                 background_tasks.add_task(
-#                     extract_metadata_background,
-#                     doc.id,
-#                     extracted_text,
-#                     file.filename,
-#                     bg_db
-#                 )
-            
-#             results.append({
-#                 "filename": file.filename,
-#                 "status": "success",
-#                 "document_id": doc.id,
-#                 "s3_url": s3_url,
-#                 "text_length": len(extracted_text),
-#                 "metadata_status": "processing",
-#                 "embedding_status": "not_embedded"
-#             })
-            
-#         except Exception as e:
-#             results.append({
-#                 "filename": file.filename,
-#                 "status": "error",
-#                 "message": str(e)
-#             })
-    
-#     return {"results": results}
-
-
-# @router.post("/upload")
-# async def upload_documents(
-#     file: UploadFile = File(...),          # Single File
-#     title: Optional[str] = Form(None),     # User Input
-#     category: Optional[str] = Form("Uncategorized"),
-#     department: Optional[str] = Form("General"),    
-#     description: Optional[str] = Form(None), # ✅ User's Description
-#     visibility: Optional[str] = Form("public"),
-#     institution: Optional[str] = Form(None), 
-#     year: Optional[str] = Form(None),      
-#     version: Optional[str] = Form("1.0"),
-#     download_allowed: bool = Form(False),  
-#     background_tasks: BackgroundTasks = None,
-#     db: Session = Depends(get_db),
-#     current_user: User = Depends(get_current_user)
-# ):
-#     """
-#     Upload documents with optional metadata
-#     If metadata is provided, skip AI extraction
-#     """
-#     results = []
-    
-#     for file in files:
-#         try:
-#             # Validate file type
-#             file_ext = file.filename.split(".")[-1].lower()
-#             if file_ext not in ["pdf", "docx", "jpeg", "jpg", "png"]:
-#                 results.append({
-#                     "filename": file.filename,
-#                     "status": "error",
-#                     "message": f"Unsupported file type: {file_ext}"
-#                 })
-#                 continue
-            
-#             # Save file locally
-#             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-#             safe_filename = sanitize_filename(file.filename)
-#             unique_filename = f"{timestamp}_{safe_filename}"
-#             file_path = os.path.join(UPLOAD_DIR, unique_filename)
-            
-#             with open(file_path, "wb") as buffer:
-#                 shutil.copyfileobj(file.file, buffer)
-            
-#             # Extract text
-#             extracted_text = extract_text(file_path, file_ext)
-            
-#             # Upload to Supabase
-#             s3_url = upload_to_supabase(file_path, unique_filename)
-            
-#             # ✅ FIXED: Use institution from form or user
-#             doc_institution_id = institution_id if institution_id else current_user.institution_id
-            
-#             # Create document
-#             doc = Document(
-#                 filename=file.filename,
-#                 file_type=file_ext,
-#                 file_path=file_path,
-#                 s3_url=s3_url,
-#                 extracted_text=extracted_text,
-#                 uploader_id=current_user.id,
-#                 institution_id=doc_institution_id,
-#                 visibility_level=visibility or "public"
-#             )
-#             db.add(doc)
-#             db.commit()
-#             db.refresh(doc)
-            
-#             # ✅ FIXED: Only extract metadata if not provided
-#             if title and category and department:
-#                 # User provided metadata, use it directly
-#                 doc_metadata = DocumentMetadata(
-#                     document_id=doc.id,
-#                     title=title,
-#                     department=department,
-#                     document_type=category,
-#                     summary=description,
-#                     text_length=len(extracted_text),
-#                     embedding_status='uploaded',
-#                     metadata_status='ready'
-#                 )
-#                 db.add(doc_metadata)
-#                 db.commit()
-                
-#                 results.append({
-#                     "filename": file.filename,
-#                     "status": "success",
-#                     "document_id": doc.id,
-#                     "metadata_status": "ready",
-#                     "metadata_source": "user_provided"
-#                 })
-#             else:
-#                 # No metadata provided, trigger AI extraction
-#                 if background_tasks:
-#                     from backend.database import SessionLocal
-#                     bg_db = SessionLocal()
-#                     background_tasks.add_task(
-#                         extract_metadata_background,
-#                         doc.id,
-#                         extracted_text,
-#                         file.filename,
-#                         bg_db
-#                     )
-                
-    #             results.append({
-    #                 "filename": file.filename,
-    #                 "status": "success",
-    #                 "document_id": doc.id,
-    #                 "metadata_status": "processing",
-    #                 "metadata_source": "ai_extraction"
-    #             })
-            
-    #     except Exception as e:
-    #         results.append({
-    #             "filename": file.filename,
-    #             "status": "error",
-    #             "message": str(e)
-    #         })
-    
-    # return {"results": results}
 
 @router.post("/upload")
 async def upload_documents(
@@ -475,51 +232,20 @@ async def upload_documents(
     return {"results": results}
 
 
-
-# @router.get("/list")
-# async def list_documents(category: Optional[str] = None, db: Session = Depends(get_db)):
-#     # """List all uploaded documents"""
-#     # documents = db.query(Document).all()
-#     # return {"documents": documents}
-#     """List documents with their metadata"""
-#     # Join Document with Metadata so we get title, description, category
-#     query = db.query(Document, DocumentMetadata).\
-#         outerjoin(DocumentMetadata, Document.id == DocumentMetadata.document_id)
-    
-#     if category and category != "all":
-#         query = query.filter(DocumentMetadata.document_type == category)
-
-#     results = query.all()
-    
-#     # Format for Frontend
-#     documents = []
-#     for doc, meta in results:
-#         documents.append({
-#             "id": doc.id,
-#             "title": meta.title if meta else doc.filename, # Fallback title
-#             "description": meta.summary if meta else "",
-#             "category": meta.document_type if meta else "Uncategorized",
-#             "created_at": doc.uploaded_at, # Assuming field exists
-#             "visibility": doc.visibility_level,
-#             "department": meta.department if meta else "Unknown",
-#             "year": meta.date_published.year if meta and meta.date_published else datetime.now().year,
-#             "updated_at": doc.uploaded_at
-#         })
-    
-#     return {"documents": documents}
-
 @router.get("/list")
+@cache(expire=30)  # Cache for 30 seconds (adjust based on your needs)
 async def list_documents(
     category: Optional[str] = None,
     search: Optional[str] = None,
     sort_by: Optional[str] = "recent",
-    limit: int = 100,
+    limit: int = 20,  # Reduced from 100 for better performance
     offset: int = 0,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user) # ✅ Security: Require Login
 ):
     """
     List documents with Pagination, Search, Sorting, and Role-Based Security.
+    ⚡ Optimized with caching, eager loading, and reduced default limit.
     
     Sort options:
     - recent: Most recent first (default)
@@ -528,14 +254,11 @@ async def list_documents(
     - title-desc: Title Z-A
     - department: By department name
     """
-    # query = db.query(Document, DocumentMetadata).outerjoin(
-    #     DocumentMetadata, Document.id == DocumentMetadata.document_id
-    # )
-    query = db.query(Document, DocumentMetadata, User).outerjoin(
-        DocumentMetadata, Document.id == DocumentMetadata.document_id
-    ).outerjoin(
-        User, Document.uploader_id == User.id
-    )
+    from sqlalchemy.orm import joinedload, contains_eager
+    
+    # ✅ OPTIMIZED: Start with base query
+    # We'll add eager loading after filters to avoid conflicts
+    query = db.query(Document)
     
     # ==================================================================
     # 🔒 ROLE-BASED VISIBILITY LOGIC (Security through Obscurity + Access Control)
@@ -682,13 +405,15 @@ async def list_documents(
     # 🔍 FILTERS (Search & Category)
     # ==================================================================
 
-    # Category Filter
+    # Category Filter - join metadata for filtering
     if category and category != "all":
-        query = query.filter(DocumentMetadata.document_type == category)
+        query = query.join(DocumentMetadata).filter(DocumentMetadata.document_type == category)
 
-    # Search Filter
+    # Search Filter - join metadata for searching
     if search:
         search_term = f"%{search}%"
+        if not category or category == "all":
+            query = query.outerjoin(DocumentMetadata)
         query = query.filter(
             or_(
                 DocumentMetadata.title.ilike(search_term),
@@ -700,6 +425,11 @@ async def list_documents(
     # ==================================================================
     # 📄 SORTING
     # ==================================================================
+    # Join metadata if needed for sorting
+    if sort_by in ["title-asc", "title-desc", "department"]:
+        if not category and not search:
+            query = query.outerjoin(DocumentMetadata)
+    
     if sort_by == "recent":
         query = query.order_by(Document.uploaded_at.desc())
     elif sort_by == "oldest":
@@ -719,14 +449,25 @@ async def list_documents(
     # ==================================================================
     total_count = query.count()
     
+    # ✅ Add eager loading AFTER all filters to prevent N+1 queries
+    query = query.options(
+        joinedload(Document.doc_metadata_rel),
+        joinedload(Document.uploader),
+        joinedload(Document.institution)
+    )
+    
     if limit > 0:
         query = query.limit(limit).offset(offset)
         
     results = query.all()
     
-    # Format Response
+    # Format Response - data is already loaded via eager loading
     documents = []
-    for doc, meta, user in results:
+    for doc in results:
+        meta = doc.doc_metadata_rel
+        user = doc.uploader
+        inst = doc.institution
+        
         # If user_description exists, use it. Otherwise, use AI summary.
         display_description = doc.user_description if doc.user_description else (meta.summary if meta else "")
         documents.append({
@@ -779,23 +520,33 @@ async def get_vector_stats():
         }
 
 @router.get("/vector-stats/{document_id}")
-async def get_document_vector_stats(document_id: int):
-    """Get vector store statistics for a specific document"""
+async def get_document_vector_stats(document_id: int, db: Session = Depends(get_db)):
+    """Get vector store statistics for a specific document using pgvector"""
     try:
-        from Agent.vector_store.faiss_store import FAISSVectorStore
-        index_path = f"Agent/vector_store/documents/{document_id}/faiss_index"
+        from Agent.vector_store.pgvector_store import PGVectorStore
+        from backend.database import DocumentEmbedding
         
-        if not os.path.exists(f"{index_path}.index"):
-            raise HTTPException(status_code=404, detail="Vector index not found for this document")
+        # Check if document exists
+        document = db.query(Document).filter(Document.id == document_id).first()
+        if not document:
+            raise HTTPException(status_code=404, detail="Document not found")
         
-        vector_store = FAISSVectorStore(index_path=index_path)
-        stats = vector_store.get_stats()
+        # Get embedding count from pgvector
+        embedding_count = db.query(DocumentEmbedding).filter(
+            DocumentEmbedding.document_id == document_id
+        ).count()
+        
+        if embedding_count == 0:
+            raise HTTPException(status_code=404, detail="No embeddings found for this document")
         
         return {
             "status": "success",
             "document_id": document_id,
-            "stats": stats,
-            "index_path": index_path
+            "stats": {
+                "total_vectors": embedding_count,
+                "dimension": 1024,
+                "storage": "pgvector"
+            }
         }
     except HTTPException:
         raise
@@ -805,13 +556,6 @@ async def get_document_vector_stats(document_id: int):
             "message": str(e)
         }
 
-# @router.get("/{document_id}")
-# async def get_document(document_id: int, db: Session = Depends(get_db)):
-#     """Get document details by ID"""
-#     doc = db.query(Document).filter(Document.id == document_id).first()
-#     if not doc:
-#         raise HTTPException(status_code=404, detail="Document not found")
-#     return doc
 @router.get("/{document_id}")
 async def get_document(
     document_id: int,

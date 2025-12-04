@@ -131,6 +131,7 @@ class PGVectorStore:
                     query = query.filter(filters)
             
             # Filter by approval status (approved or pending only)
+            # Draft, rejected, and changes_requested documents are NOT searchable
             query = query.filter(
                 DocumentEmbedding.approval_status.in_(['approved', 'pending'])
             )

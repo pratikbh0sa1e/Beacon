@@ -65,7 +65,7 @@ class TranscriptionService:
         else:
             raise ValueError(f"Unknown engine type: {self.engine_type}")
         
-        logger.info(f"✅ TranscriptionService initialized with {self.active_engine}")
+        logger.info(f"TranscriptionService initialized with {self.active_engine}")
     
     def _init_whisper_local(self):
         """Initialize local Whisper model"""
@@ -79,7 +79,7 @@ class TranscriptionService:
             self.model = whisper.load_model(WHISPER_MODEL_SIZE, device=device)
             self.device = device
             
-            logger.info(f"✅ Whisper model loaded successfully on {device}")
+            logger.info(f"Whisper model loaded successfully on {device}")
             
         except ImportError:
             raise ImportError(
@@ -100,7 +100,7 @@ class TranscriptionService:
             os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = api_key
             
             self.client = speech.SpeechClient()
-            logger.info("✅ Google Cloud Speech-to-Text client initialized")
+            logger.info("Google Cloud Speech-to-Text client initialized")
             
         except ImportError:
             raise ImportError(
@@ -119,7 +119,7 @@ class TranscriptionService:
             openai.api_key = api_key
             self.openai = openai
             
-            logger.info("✅ OpenAI Whisper API initialized")
+            logger.info("OpenAI Whisper API initialized")
             
         except ImportError:
             raise ImportError(
@@ -163,7 +163,7 @@ class TranscriptionService:
             else:
                 raise ValueError(f"Unknown engine type: {self.engine_type}")
             
-            logger.info(f"✅ Transcription successful: {len(result['text'])} characters")
+            logger.info(f"Transcription successful: {len(result['text'])} characters")
             return result
             
         except Exception as e:

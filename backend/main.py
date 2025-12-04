@@ -1,5 +1,6 @@
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from backend.database import engine, Base
 from backend.routers import (
     auth_router,
@@ -23,6 +24,7 @@ from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
 from dotenv import load_dotenv
 import logging
+import time
 
 load_dotenv()
 
@@ -42,6 +44,20 @@ app = FastAPI(
     version="2.0.0"
 )
 
+# Performance monitoring middleware
+@app.middleware("http")
+async def add_process_time_header(request: Request, call_next):
+    start_time = time.time()
+    response = await call_next(request)
+    process_time = time.time() - start_time
+    response.headers["X-Process-Time"] = str(round(process_time, 3))
+    
+    # Log slow requests for monitoring
+    if process_time > 1.0:
+        logger.warning(f"SLOW REQUEST: {request.method} {request.url.path} took {process_time:.2f}s")
+    
+    return response
+
 # CORS middleware
 app.add_middleware(
     CORSMiddleware,
@@ -54,6 +70,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# GZip compression middleware for faster response times
+app.add_middleware(GZipMiddleware, minimum_size=1000)
 
 # Include routers
 app.include_router(auth_router.router, prefix="/auth", tags=["authentication"])
@@ -104,7 +123,60 @@ async def health_check():
 
 @app.on_event("startup")
 async def startup_event():
-    """Start background scheduler on app startup"""
+    """Start background scheduler and initialize cache on app startup"""
+    logger.info("Starting BEACON Platform...")
+    
+    # Initialize cache (Redis if available, fallback to in-memory)
+    try:
+        from fastapi_cache import FastAPICache
+        import os
+        
+        # Try Redis first (better for production)
+        redis_url = os.getenv("REDIS_URL", "redis://localhost:6379")
+        try:
+            from redis import asyncio as aioredis
+            from fastapi_cache.backends.redis import RedisBackend
+            
+            # Check if it's Upstash or other cloud Redis (requires SSL)
+            is_cloud_redis = "upstash.io" in redis_url or "redislabs.com" in redis_url
+            
+            if is_cloud_redis:
+                # Upstash requires rediss:// (Redis with SSL)
+                # Convert redis:// to rediss:// for SSL
+                if redis_url.startswith("redis://"):
+                    redis_url = redis_url.replace("redis://", "rediss://", 1)
+                
+                redis = await aioredis.from_url(
+                    redis_url,
+                    encoding="utf8",
+                    decode_responses=True
+                )
+            else:
+                # Local Redis doesn't need SSL
+                redis = await aioredis.from_url(
+                    redis_url,
+                    encoding="utf8",
+                    decode_responses=True
+                )
+            
+            # Test connection
+            await redis.ping()
+            FastAPICache.init(RedisBackend(redis), prefix="beacon-cache:")
+            cache_type = "Upstash Redis" if is_cloud_redis else "Redis"
+            logger.info(f"Cache initialized ({cache_type})")
+        except (ImportError, Exception) as redis_error:
+            # Fallback to in-memory cache
+            from fastapi_cache.backends.inmemory import InMemoryBackend
+            FastAPICache.init(InMemoryBackend(), prefix="beacon-cache:")
+            logger.info("Cache initialized (in-memory) - Redis connection failed")
+            logger.debug(f"Redis error: {redis_error}")
+    except ImportError:
+        logger.warning("fastapi-cache2 not installed. Install with: pip install fastapi-cache2")
+    except Exception as e:
+        logger.warning(f"Cache initialization failed: {str(e)}")
+    
+    # Start scheduler
     logger.info("Starting sync scheduler...")
     start_scheduler(sync_time="02:00")  # Daily sync at 2 AM
     logger.info("Sync scheduler started")
+    logger.info("BEACON Platform ready!")

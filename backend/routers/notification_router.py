@@ -9,6 +9,18 @@ from backend.routers.auth_router import get_current_user
 
 router = APIRouter(tags=["notifications"])
 
+# Try to import caching decorator
+try:
+    from fastapi_cache.decorator import cache
+    CACHE_AVAILABLE = True
+except ImportError:
+    # Fallback no-op decorator if cache not installed
+    def cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    CACHE_AVAILABLE = False
+
 
 @router.get("/list")
 async def get_notifications(
@@ -48,11 +60,12 @@ async def get_notifications(
 
 
 @router.get("/unread-count")
+@cache(expire=10)  # Cache for 10 seconds - frequently polled endpoint
 async def get_unread_count(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get count of unread notifications"""
+    """Get count of unread notifications (cached for 10s)"""
     count = db.query(Notification).filter(
         Notification.user_id == current_user.id,
         Notification.read == False

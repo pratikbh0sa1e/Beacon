@@ -129,7 +129,7 @@ async def voice_query_stream(
         detected_language = transcription_result["language"]
         confidence = transcription_result.get("confidence")
         
-        logger.info(f"✅ Transcription: '{transcribed_text}'")
+        logger.info(f"Transcription: '{transcribed_text}'")
         
         if not transcribed_text:
             raise HTTPException(
@@ -236,7 +236,7 @@ async def voice_query(
         detected_language = transcription_result["language"]
         confidence = transcription_result.get("confidence")
         
-        logger.info(f"✅ Transcription: '{transcribed_text}' (language: {detected_language})")
+        logger.info(f"Transcription: '{transcribed_text}' (language: {detected_language})")
         
         if not transcribed_text:
             raise HTTPException(
@@ -271,7 +271,7 @@ async def voice_query(
         end_time = datetime.now()
         processing_time = (end_time - start_time).total_seconds()
         
-        logger.info(f"✅ Voice query processed in {processing_time:.2f}s")
+        logger.info(f"Voice query processed in {processing_time:.2f}s")
         
         return {
             "status": "success",
@@ -352,7 +352,7 @@ async def transcribe_audio(
             language=language
         )
         
-        logger.info(f"✅ Transcription complete: {len(result['text'])} characters")
+        logger.info(f"Transcription complete: {len(result['text'])} characters")
         
         return {
             "status": "success",
