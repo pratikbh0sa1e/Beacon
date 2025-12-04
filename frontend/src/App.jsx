@@ -1,6 +1,6 @@
 // App.jsx
 
-import React, { useEffect } from "react";
+import { useEffect } from "react";
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { Toaster } from "sonner";
 import { useAuthStore } from "./stores/authStore";
@@ -10,6 +10,9 @@ import { ProtectedRoute } from "./middleware/ProtectedRoute";
 import { MainLayout } from "./components/layout/MainLayout";
 import { SessionWarningModal } from "./components/auth/SessionWarningModal";
 import { ActivityTracker } from "./components/auth/ActivityTracker";
+
+// Landing Page
+import { LandingPage } from "./pages/LandingPage";
 
 // Auth Pages
 import { LoginPage } from "./pages/auth/LoginPage";
@@ -50,6 +53,28 @@ import { SettingsPage } from "./pages/SettingsPage";
 
 // Constants
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "./constants/roles";
+
+// Root Route Component - Conditional rendering based on auth state
+const RootRoute = () => {
+  const { isAuthenticated, user } = useAuthStore();
+
+  // If not authenticated, show landing page
+  if (!isAuthenticated) {
+    return <LandingPage />;
+  }
+
+  // If authenticated but not approved, redirect to pending approval
+  if (user && !user.approved) {
+    return <Navigate to="/pending-approval" replace />;
+  }
+
+  // If authenticated and approved, show dashboard layout
+  return (
+    <ProtectedRoute>
+      <MainLayout />
+    </ProtectedRoute>
+  );
+};
 
 const App = () => {
   const initTheme = useThemeStore((state) => state.initTheme);
@@ -122,14 +147,9 @@ const App = () => {
           }
         />
 
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <MainLayout />
-            </ProtectedRoute>
-          }
-        >
+        {/* Root Route - Conditional: Landing Page or Dashboard */}
+        <Route path="/" element={<RootRoute />}>
+          {/* These routes only render when authenticated */}
           <Route index element={<DashboardPage />} />
 
           <Route path="documents">
