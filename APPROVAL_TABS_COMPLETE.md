@@ -59,7 +59,7 @@ query = db.query(Document).filter(Document.approval_status == "approved")
 # Role-based filtering
 if current_user.role == "developer":
     pass  # See all
-elif current_user.role == "moe_admin":
+elif current_user.role == "ministry_admin":
     query = query.filter(Document.visibility_level.in_(["restricted", "public"]))
 elif current_user.role == "university_admin":
     query = query.filter(

@@ -12,6 +12,7 @@ This implementation fixes critical issues in the RAG system:
 ## Changes Made
 
 ### 1. Database Schema (`backend/database.py`)
+
 - Added `pgvector` import and `Vector` type
 - Created `DocumentEmbedding` table with:
   - Vector embeddings (1024 dimensions for BGE-large-en-v1.5)
@@ -19,6 +20,7 @@ This implementation fixes critical issues in the RAG system:
   - Indexes for efficient role-based filtering
 
 ### 2. PGVector Store (`Agent/vector_store/pgvector_store.py`)
+
 - New centralized vector store using PostgreSQL pgvector extension
 - `add_embeddings()`: Store embeddings with access control metadata
 - `search()`: Vector similarity search with role-based filtering
@@ -29,6 +31,7 @@ This implementation fixes critical issues in the RAG system:
   - **Students/Others**: Sees public + their institution's institution_only docs
 
 ### 3. Lazy Search Tools (`Agent/tools/lazy_search_tools.py`)
+
 - Updated `search_documents_lazy()` to:
   - Accept `user_role` and `user_institution_id` parameters
   - Use pgvector instead of FAISS
@@ -37,17 +40,20 @@ This implementation fixes critical issues in the RAG system:
 - Updated `search_specific_document_lazy()` with same changes
 
 ### 4. RAG Agent (`Agent/rag_agent/react_agent.py`)
+
 - Added user context fields: `current_user_role`, `current_user_institution_id`
 - Created wrapper methods to inject user context into search tools
 - Updated `query()` and `query_stream()` to accept user context
 - Tools now automatically use current user's permissions
 
 ### 5. Chat Router (`backend/routers/chat_router.py`)
+
 - Updated `/query` endpoint to pass `current_user.role` and `current_user.institution_id` to RAG agent
 - Updated `/query/stream` endpoint with same changes
 - Both endpoints now require authentication
 
 ### 6. Lazy Embedder (`Agent/lazy_rag/lazy_embedder.py`)
+
 - Switched from FAISS to pgvector storage
 - `embed_document()` now:
   - Fetches documents from S3 URLs if available
@@ -56,6 +62,7 @@ This implementation fixes critical issues in the RAG system:
 - Added `_fetch_text_from_s3()` to retrieve files from Supabase
 
 ### 7. Migration Script (`scripts/enable_pgvector.py`)
+
 - Enables pgvector extension in PostgreSQL
 - Creates `document_embeddings` table
 - Run this before using the new system
@@ -77,6 +84,7 @@ python scripts/enable_pgvector.py
 ```
 
 This will:
+
 - Enable the `vector` extension in PostgreSQL
 - Create the `document_embeddings` table
 
@@ -115,8 +123,8 @@ When a user queries the RAG system:
 3. **SQL Filters Applied**: PGVector store builds WHERE clauses based on role:
    ```sql
    -- Example for University Admin
-   WHERE (visibility_level = 'public' 
-      OR (visibility_level IN ('institution_only', 'restricted') 
+   WHERE (visibility_level = 'public'
+      OR (visibility_level IN ('institution_only', 'restricted')
           AND institution_id = <user_institution_id>))
    AND approval_status IN ('approved', 'pending')
    ```
@@ -142,15 +150,16 @@ Citations now include:
 {
   "document_id": 123,
   "title": "Policy Document",
-  "approval_status": "pending",  // ← NEW
-  "visibility_level": "public",   // ← NEW
-  "institution_id": 5,            // ← NEW
+  "approval_status": "pending", // ← NEW
+  "visibility_level": "public", // ← NEW
+  "institution_id": 5, // ← NEW
   "text": "...",
   "score": 0.95
 }
 ```
 
 Frontend can display badges:
+
 - ✅ Approved
 - ⏳ Pending Approval
 
@@ -161,7 +170,7 @@ Frontend can display badges:
 ```python
 # Test as MoE Admin
 POST /api/chat/query
-Headers: Authorization: Bearer <moe_admin_token>
+Headers: Authorization: Bearer <MINISTRY_ADMIN_token>
 Body: {"question": "What are the policies?"}
 
 # Test as University Admin
@@ -196,6 +205,7 @@ curl -X POST http://localhost:8000/api/chat/query \
 ```
 
 Response should include:
+
 ```json
 {
   "citations": [
@@ -213,6 +223,7 @@ Response should include:
 ### Indexing
 
 The `document_embeddings` table has indexes on:
+
 - `document_id, chunk_index` (composite)
 - `visibility_level, institution_id` (composite)
 - `approval_status`
@@ -230,15 +241,17 @@ These ensure fast filtering before vector search.
 For production with >10,000 documents:
 
 1. Create vector index:
+
 ```sql
-CREATE INDEX ON document_embeddings 
-USING ivfflat (embedding vector_cosine_ops) 
+CREATE INDEX ON document_embeddings
+USING ivfflat (embedding vector_cosine_ops)
 WITH (lists = 100);
 ```
 
 2. Or use HNSW (better for accuracy):
+
 ```sql
-CREATE INDEX ON document_embeddings 
+CREATE INDEX ON document_embeddings
 USING hnsw (embedding vector_cosine_ops);
 ```
 
@@ -247,6 +260,7 @@ USING hnsw (embedding vector_cosine_ops);
 ### "pgvector extension not found"
 
 Install pgvector in PostgreSQL:
+
 ```bash
 # Ubuntu/Debian
 sudo apt install postgresql-15-pgvector
@@ -264,12 +278,14 @@ make install
 ### "No embeddings found"
 
 Documents need to be embedded. Either:
+
 1. Wait for lazy embedding on first query
 2. Run batch embedding script (see Setup step 3)
 
 ### "Access denied" errors
 
 Check:
+
 1. User has correct role in database
 2. Document has correct `visibility_level` and `institution_id`
 3. User's `institution_id` matches document's (for institution_only docs)

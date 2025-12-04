@@ -34,13 +34,15 @@ import { AIChatPage } from "./pages/AIChatPage";
 // Admin Pages
 import { UserManagementPage } from "./pages/admin/UserManagementPage";
 import { InstitutionsPage } from "./pages/admin/InstitutionsPage";
-import { DocumentApprovalsPage } from "./pages/admin/DocumentApprovalsPage";
 import { AnalyticsPage } from "./pages/admin/AnalyticsPage";
 import { SystemHealthPage } from "./pages/admin/SystemHealthPage";
 
 // Bookmark Page
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { BookmarksPage } from "./pages/BookmarksPage";
+
+// Notes Page
+import { NotesPage } from "./pages/NotesPage";
 
 // User Pages
 import { ProfilePage } from "./pages/ProfilePage";
@@ -135,11 +137,16 @@ const App = () => {
             <Route path=":id" element={<DocumentDetailPage />} />
           </Route>
           <Route path="bookmarks" element={<BookmarksPage />} />
+          <Route path="notes" element={<NotesPage />} />
           <Route
             path="approvals"
             element={
               <ProtectedRoute
-                allowedRoles={["developer", "moe_admin", "university_admin"]}
+                allowedRoles={[
+                  "developer",
+                  "ministry_admin",
+                  "university_admin",
+                ]}
               >
                 <ApprovalsPage />
               </ProtectedRoute>
@@ -174,15 +181,6 @@ const App = () => {
               element={
                 <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                   <InstitutionsPage />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="approvals"
-              element={
-                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
-                  <DocumentApprovalsPage />
                 </ProtectedRoute>
               }
             />

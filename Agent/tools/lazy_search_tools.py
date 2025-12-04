@@ -61,10 +61,10 @@ def search_documents_lazy(query: str, top_k: int = 5, user_role: Optional[str] =
         )
         
         # Apply role-based filters to find which docs user can access
-        from backend.constants.roles import DEVELOPER, MOE_ADMIN, UNIVERSITY_ADMIN
+        from backend.constants.roles import DEVELOPER, MINISTRY_ADMIN, UNIVERSITY_ADMIN
         if user_role == DEVELOPER:
             pass  # Can access all
-        elif user_role == MOE_ADMIN:
+        elif user_role == MINISTRY_ADMIN:
             query_docs = query_docs.filter(
                 Document.visibility_level.in_(['public', 'restricted', 'institution_only'])
             )
@@ -247,7 +247,7 @@ def search_specific_document_lazy(document_id: int, query: str, top_k: int = 5, 
         access_query = db.query(Document).filter(Document.id == document_id)
         if filters is not None:
             # Apply same filters to document table
-            if user_role == "moe_admin":
+            if user_role == "ministry_admin":
                 access_query = access_query.filter(
                     Document.visibility_level.in_(['public', 'restricted', 'institution_only'])
                 )

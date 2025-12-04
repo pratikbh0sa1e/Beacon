@@ -80,13 +80,13 @@ def get_notification_recipients(actor_role: str, institution_id: Optional[int], 
             recipients.extend([admin[0] for admin in uni_admins])
 
         # Also: MoE Admins
-        moe_admins = db.query(User.id).filter(User.role == "moe_admin").all()
-        recipients.extend([admin[0] for admin in moe_admins])
+        MINISTRY_ADMINs = db.query(User.id).filter(User.role == "ministry_admin").all()
+        recipients.extend([admin[0] for admin in MINISTRY_ADMINs])
 
     # University Admin
     elif actor_role == "university_admin":
-        moe_admins = db.query(User.id).filter(User.role == "moe_admin").all()
-        recipients.extend([admin[0] for admin in moe_admins])
+        MINISTRY_ADMINs = db.query(User.id).filter(User.role == "ministry_admin").all()
+        recipients.extend([admin[0] for admin in MINISTRY_ADMINs])
 
     return list(set(recipients))
 ```
@@ -116,7 +116,7 @@ def get_notification_priority(event_type: str, metadata: dict) -> str:
     if event_type in ["document_approval", "role_elevation", "user_approval"]:
         if metadata.get("visibility") in ["restricted", "confidential"]:
             return "high"
-        if metadata.get("role") in ["university_admin", "moe_admin"]:
+        if metadata.get("role") in ["university_admin", "ministry_admin"]:
             return "high"
 
     # Medium
@@ -171,7 +171,7 @@ def get_notification_priority(event_type: str, metadata: dict) -> str:
 def notify_user_registration(user: User, db: Session):
     """Notify admins about new user registration"""
     recipients = get_notification_recipients(user.role, user.institution_id, db)
-    priority = "high" if user.role in ["university_admin", "moe_admin"] else "medium"
+    priority = "high" if user.role in ["university_admin", "ministry_admin"] else "medium"
 
     create_notification(
         user_ids=recipients,

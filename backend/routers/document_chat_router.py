@@ -78,7 +78,7 @@ def check_document_access(document_id: int, user: User, db: Session) -> Document
     user_role = user.role
     user_institution_id = user.institution_id
     
-    if user_role in ["developer", "moe_admin"]:
+    if user_role in ["developer", "ministry_admin"]:
         return document
     
     if document.approval_status not in ["approved", "restricted_approved"]:
@@ -91,7 +91,7 @@ def check_document_access(document_id: int, user: User, db: Session) -> Document
         if document.institution_id != user_institution_id:
             raise HTTPException(status_code=403, detail="Document restricted to institution members")
     elif document.visibility_level in ["restricted", "confidential"]:
-        if user_role not in ["developer", "moe_admin", "university_admin", "document_officer"]:
+        if user_role not in ["developer", "ministry_admin", "university_admin", "document_officer"]:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     return document

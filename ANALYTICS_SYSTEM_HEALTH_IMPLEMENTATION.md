@@ -96,7 +96,7 @@ Created two comprehensive admin pages for monitoring system analytics and health
 - `/admin/analytics` - Analytics Dashboard
 - `/admin/system` - System Health Monitor
 
-Both routes are protected with `ADMIN_ROLES` (developer, moe_admin, university_admin)
+Both routes are protected with `ADMIN_ROLES` (developer, MINISTRY_ADMIN, university_admin)
 
 ---
 

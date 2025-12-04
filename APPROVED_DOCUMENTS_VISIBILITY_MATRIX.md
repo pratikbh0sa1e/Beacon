@@ -5,7 +5,7 @@
 Once a document is **APPROVED** (`approval_status = "approved"`), visibility is determined by:
 
 1. **Visibility Level** (public, institution_only, restricted, confidential)
-2. **Viewer's Role** (developer, moe_admin, university_admin, document_officer, student, public)
+2. **Viewer's Role** (developer, MINISTRY_ADMIN, university_admin, document_officer, student, public)
 3. **Viewer's Institution** (same or different from document's institution)
 
 ---

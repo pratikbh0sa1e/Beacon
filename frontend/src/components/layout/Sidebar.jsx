@@ -14,6 +14,7 @@ import {
   X,
   Star,
   CheckCircle,
+  StickyNote,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -24,6 +25,7 @@ const menuItems = [
   { icon: Home, label: "Dashboard", path: "/", roles: [] },
   { icon: FileText, label: "Documents", path: "/documents", roles: [] },
   { icon: Star, label: "Bookmarks", path: "/bookmarks", roles: [] },
+  { icon: StickyNote, label: "My Notes", path: "/notes", roles: [] },
   {
     icon: Upload,
     label: "Upload",
@@ -35,18 +37,12 @@ const menuItems = [
     icon: CheckCircle,
     label: "Document Approvals",
     path: "/approvals",
-    roles: ["developer", "moe_admin", "university_admin"],
+    roles: ["developer", "ministry_admin", "university_admin"],
   },
   {
     icon: Users,
     label: "User Management",
     path: "/admin/users",
-    roles: ADMIN_ROLES,
-  },
-  {
-    icon: Shield,
-    label: "User Approvals",
-    path: "/admin/approvals",
     roles: ADMIN_ROLES,
   },
   {

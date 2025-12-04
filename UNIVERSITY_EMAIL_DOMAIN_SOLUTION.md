@@ -82,7 +82,7 @@ Authorization: Bearer {token}
 
 ```json
 {
-  "moe_admin": ["moe.gov.in", "education.gov.in"],
+  "ministry_admin": ["moe.gov.in", "education.gov.in"],
   "university_admin": ["iitdelhi.ac.in", "du.ac.in"]
 }
 ```
@@ -237,7 +237,7 @@ ENABLE_DOMAIN_VALIDATION = False
 
 ```python
 INSTITUTION_DOMAINS = {
-    "moe_admin": [
+    "ministry_admin": [
         "moe.gov.in",
         "education.gov.in",
         "shiksha.gov.in"

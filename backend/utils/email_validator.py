@@ -22,7 +22,7 @@ DISPOSABLE_EMAIL_DOMAINS = {
 
 # Institution domain mappings (add your actual domains here)
 INSTITUTION_DOMAINS = {
-    "moe_admin": [
+    "ministry_admin": [
         "moe.gov.in",  # Ministry of Education
         "education.gov.in",
         "shiksha.gov.in"
@@ -91,7 +91,7 @@ def validate_institution_domain(email: str, role: str) -> Tuple[bool, Optional[s
     
     Args:
         email: Email address to validate
-        role: User role (moe_admin, university_admin, etc.)
+        role: User role (MINISTRY_ADMIN, university_admin, etc.)
     
     Returns:
         Tuple[bool, Optional[str]]: (is_valid, error_message)
@@ -101,7 +101,7 @@ def validate_institution_domain(email: str, role: str) -> Tuple[bool, Optional[s
         return True, None
     
     # Only validate for admin roles
-    if role not in ["moe_admin", "university_admin"]:
+    if role not in ["ministry_admin", "university_admin"]:
         return True, None
     
     domain = email.split('@')[-1].lower()
@@ -112,7 +112,7 @@ def validate_institution_domain(email: str, role: str) -> Tuple[bool, Optional[s
         return True, None
     
     if domain not in allowed_domains:
-        role_name = "Ministry of Education" if role == "moe_admin" else "University"
+        role_name = "Ministry of Education" if role == "ministry_admin" else "University"
         return False, f"{role_name} accounts must use an official institutional email address"
     
     return True, None
@@ -156,7 +156,7 @@ def add_institution_domain(role: str, domain: str):
     Add a domain to the institution domain whitelist
     
     Args:
-        role: User role (moe_admin, university_admin)
+        role: User role (MINISTRY_ADMIN, university_admin)
         domain: Domain to add (e.g., "university.edu")
     """
     if role in INSTITUTION_DOMAINS:

@@ -40,17 +40,24 @@ Base = declarative_base()
 
 
 class Institution(Base):
-    """Institutions (Universities, Government Departments)"""
+    """Institutions (Universities, Research Centres, Hospitals, etc.) and Ministries"""
     __tablename__ = "institutions"
     
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(255), nullable=False, unique=True)
     location = Column(String(255), nullable=True)
-    type = Column(String(50), nullable=False)  # university, government_dept, ministry
+    type = Column(String(50), nullable=False)  # university, ministry
+    parent_ministry_id = Column(Integer, ForeignKey("institutions.id"), nullable=True, index=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     
+    # Soft delete fields
+    deleted_at = Column(DateTime, nullable=True, index=True)
+    deleted_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    
     # Relationships
-    users = relationship("User", back_populates="institution")
+    users = relationship("User", back_populates="institution", foreign_keys="User.institution_id")
+    deleted_by_user = relationship("User", foreign_keys=[deleted_by])
+    parent_ministry = relationship("Institution", remote_side=[id], foreign_keys=[parent_ministry_id], backref="child_universities")
 
 
 class User(Base):
@@ -62,7 +69,7 @@ class User(Base):
     email = Column(String(255), nullable=False, unique=True, index=True)
     password_hash = Column(String(255), nullable=False)
     role = Column(String(50), nullable=False, index=True)
-    # Roles: developer, moe_admin, university_admin, document_officer, student, public_viewer
+    # Roles: developer, MINISTRY_ADMIN, university_admin, document_officer, student, public_viewer
     
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True)
     approved = Column(Boolean, default=False, nullable=False, index=True)
@@ -76,7 +83,7 @@ class User(Base):
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
-    institution = relationship("Institution", back_populates="users")
+    institution = relationship("Institution", back_populates="users", foreign_keys=[institution_id])
     audit_logs = relationship("AuditLog", back_populates="user")
     bookmarks = relationship("Bookmark", cascade="all, delete-orphan", back_populates="user")
     chat_sessions = relationship("ChatSession", back_populates="user", cascade="all, delete-orphan")
@@ -109,13 +116,13 @@ class Document(Base):
     visibility_level = Column(String(50), default="public")
     # Levels: public, institution_only, restricted, confidential
     institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True)
-    uploader_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    uploader_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Preserve document if uploader deleted
     download_allowed = Column(Boolean, default=False, nullable=False)
     # Approval workflow
     approval_status = Column(String(50), default="draft", index=True)
     # Status: draft, pending, under_review, changes_requested, approved, 
     #         restricted_approved, archived, rejected, flagged, expired
-    approved_by = Column(Integer, ForeignKey("users.id"), nullable=True)
+    approved_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # Preserve document if approver deleted
     approved_at = Column(DateTime, nullable=True)
     # Escalation flag for MoE review
     requires_moe_approval = Column(Boolean, default=False, nullable=False, index=True)
@@ -260,7 +267,7 @@ class AuditLog(Base):
     __tablename__ = "audit_logs"
     
     id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)  # SET NULL to preserve audit trail
     action = Column(String(100), nullable=False, index=True)
     # Actions: login, logout, upload_document, approve_user, reject_user, 
     #          approve_document, reject_document, role_changed, search_query
@@ -456,3 +463,35 @@ def get_db():
         yield db
     finally:
         db.close()
+
+
+class UserNote(Base):
+    """Personal study notes - private to each user"""
+    __tablename__ = "user_notes"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=True, index=True)
+    
+    # Note content
+    title = Column(String(500), nullable=True)
+    content = Column(Text, nullable=False)
+    tags = Column(ARRAY(String), nullable=True)
+    
+    # Metadata
+    is_pinned = Column(Boolean, default=False, nullable=False)
+    color = Column(String(20), nullable=True)  # For color-coding notes
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    user = relationship("User", foreign_keys=[user_id])
+    document = relationship("Document", foreign_keys=[document_id])
+    
+    # Indexes for performance
+    __table_args__ = (
+        Index("idx_user_notes_user_document", "user_id", "document_id"),
+        Index("idx_user_notes_created", "created_at"),
+    )

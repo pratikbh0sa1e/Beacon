@@ -83,7 +83,7 @@ def upgrade() -> None:
     op.alter_column('institutions', 'type',
                existing_type=sa.VARCHAR(length=50),
                comment=None,
-               existing_comment='Values: university, government_dept, ministry',
+               existing_comment='Values: university, ministry',
                existing_nullable=False)
     op.alter_column('institutions', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
@@ -92,7 +92,7 @@ def upgrade() -> None:
     op.alter_column('users', 'role',
                existing_type=sa.VARCHAR(length=50),
                comment=None,
-               existing_comment='Values: developer, moe_admin, university_admin, document_officer, student, public_viewer',
+               existing_comment='Values: developer, MINISTRY_ADMIN, university_admin, document_officer, student, public_viewer',
                existing_nullable=False)
     op.alter_column('users', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
@@ -127,7 +127,7 @@ def downgrade() -> None:
                existing_server_default=sa.text('now()'))
     op.alter_column('users', 'role',
                existing_type=sa.VARCHAR(length=50),
-               comment='Values: developer, moe_admin, university_admin, document_officer, student, public_viewer',
+               comment='Values: developer, MINISTRY_ADMIN, university_admin, document_officer, student, public_viewer',
                existing_nullable=False)
     op.alter_column('institutions', 'created_at',
                existing_type=postgresql.TIMESTAMP(),
@@ -135,7 +135,7 @@ def downgrade() -> None:
                existing_server_default=sa.text('now()'))
     op.alter_column('institutions', 'type',
                existing_type=sa.VARCHAR(length=50),
-               comment='Values: university, government_dept, ministry',
+               comment='Values: university, ministry',
                existing_nullable=False)
     op.drop_constraint(None, 'documents', type_='foreignkey')
     op.drop_constraint(None, 'documents', type_='foreignkey')

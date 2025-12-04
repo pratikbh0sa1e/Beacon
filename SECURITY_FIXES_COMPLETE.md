@@ -129,21 +129,21 @@ async def endpoint_name(
 1. **POST `/embed`** - CRITICAL
 
    ```python
-   if current_user.role not in ["developer", "moe_admin"]:
+   if current_user.role not in ["developer", "ministry_admin"]:
        raise HTTPException(status_code=403, detail="Admin access only")
    ```
 
 2. **GET `/vector-stats`** - HIGH
 
    ```python
-   if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+   if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
        raise HTTPException(status_code=403, detail="Admin access only")
    ```
 
 3. **GET `/vector-stats/{id}`** - HIGH
 
    ```python
-   if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+   if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
        raise HTTPException(status_code=403, detail="Admin access only")
    ```
 

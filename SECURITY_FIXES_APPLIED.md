@@ -87,7 +87,7 @@ async def embed_documents(
     db: Session = Depends(get_db)
 ):
     # ADD THIS:
-    if current_user.role not in ["developer", "moe_admin"]:
+    if current_user.role not in ["developer", "ministry_admin"]:
         raise HTTPException(status_code=403, detail="Admin access only")
 ```
 
@@ -99,7 +99,7 @@ async def get_vector_stats(
     current_user: User = Depends(get_current_user)  # ADD THIS
 ):
     # ADD THIS:
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Admin access only")
 ```
 
@@ -110,7 +110,7 @@ async def get_document_vector_stats(
     current_user: User = Depends(get_current_user)  # ADD THIS
 ):
     # ADD THIS:
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Admin access only")
 ```
 
@@ -176,7 +176,7 @@ async def browse_documents(
 1. **Document Embed Endpoint**
 
    - Add authentication
-   - Add developer/moe_admin role check
+   - Add developer/MINISTRY_ADMIN role check
    - File: `backend/routers/document_router.py`
 
 2. **Data Source Router - Remaining Endpoints**

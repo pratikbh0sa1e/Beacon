@@ -31,6 +31,7 @@ export const RegisterPage = () => {
     confirmPassword: "",
     role: "",
     institution_id: null,
+    parent_ministry_id: null, // For two-step selection
   });
   const [institutions, setInstitutions] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -38,19 +39,35 @@ export const RegisterPage = () => {
 
   // ✅ FIXED: Filter out 'developer' from available roles
   const availableRoles = [
-    { value: "student", label: "Student", needsInstitution: true },
+    {
+      value: "student",
+      label: "Student",
+      needsInstitution: true,
+      institutionType: "university",
+    },
     {
       value: "document_officer",
       label: "Document Officer",
       needsInstitution: true,
+      institutionType: "university",
     },
     {
       value: "university_admin",
       label: "University Admin",
       needsInstitution: true,
+      institutionType: "university",
     },
-    { value: "moe_admin", label: "Ministry Admin", needsInstitution: false },
-    { value: "public_viewer", label: "Public Viewer", needsInstitution: false },
+    {
+      value: "ministry_admin",
+      label: "Ministry Admin",
+      needsInstitution: true,
+      institutionType: "ministry",
+    },
+    {
+      value: "public_viewer",
+      label: "Public Viewer",
+      needsInstitution: false,
+    },
     // Developer role is NOT included - it's only created via backend initialization
   ];
 
@@ -60,7 +77,7 @@ export const RegisterPage = () => {
 
   const fetchInstitutions = async () => {
     try {
-      const response = await institutionAPI.list();
+      const response = await institutionAPI.listPublic();
       setInstitutions(response.data || []);
     } catch (error) {
       console.error("Error fetching institutions:", error);
@@ -69,7 +86,25 @@ export const RegisterPage = () => {
   };
 
   const handleChange = (field, value) => {
-    setFormData((prev) => ({ ...prev, [field]: value }));
+    // If role changes, reset institution and ministry selection
+    if (field === "role") {
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+        institution_id: null,
+        parent_ministry_id: null,
+      }));
+    }
+    // If ministry changes, reset institution selection
+    else if (field === "parent_ministry_id") {
+      setFormData((prev) => ({
+        ...prev,
+        [field]: value,
+        institution_id: null,
+      }));
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+    }
   };
 
   const handleRegister = async (e) => {
@@ -128,6 +163,30 @@ export const RegisterPage = () => {
   // Get selected role info
   const selectedRole = availableRoles.find((r) => r.value === formData.role);
   const showInstitutionField = selectedRole?.needsInstitution;
+
+  // Get ministries for dropdown
+  const ministries = institutions.filter((inst) => inst.type === "ministry");
+
+  // Filter institutions based on selected role and ministry
+  let filteredInstitutions = [];
+  if (selectedRole?.institutionType === "ministry") {
+    // Ministry admin: show only ministries
+    filteredInstitutions = ministries;
+  } else if (selectedRole?.institutionType === "university") {
+    // University roles: show institutions under selected ministry
+    if (formData.parent_ministry_id) {
+      filteredInstitutions = institutions.filter(
+        (inst) =>
+          inst.type === "university" &&
+          inst.parent_ministry_id === parseInt(formData.parent_ministry_id)
+      );
+    } else {
+      // If no ministry selected yet, show all universities
+      filteredInstitutions = institutions.filter(
+        (inst) => inst.type === "university"
+      );
+    }
+  }
 
   return (
     <div className="min-h-screen flex items-center justify-center px-4 py-12 relative overflow-hidden">
@@ -226,36 +285,125 @@ export const RegisterPage = () => {
               </div>
 
               {showInstitutionField && (
-                <div className="space-y-2">
-                  <Label htmlFor="institution">
-                    Institution <span className="text-destructive">*</span>
-                  </Label>
-                  <div className="relative">
-                    <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground z-10" />
-                    <Select
-                      value={
-                        formData.institution_id
-                          ? String(formData.institution_id)
-                          : ""
-                      }
-                      onValueChange={(value) =>
-                        handleChange("institution_id", value)
-                      }
-                      required={showInstitutionField}
-                    >
-                      <SelectTrigger className="pl-10">
-                        <SelectValue placeholder="Select institution" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        {institutions.map((inst) => (
-                          <SelectItem key={inst.id} value={String(inst.id)}>
-                            {inst.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                <>
+                  {/* Step 1: Select Ministry (for university roles only) */}
+                  {selectedRole?.institutionType === "university" && (
+                    <div className="space-y-2">
+                      <Label htmlFor="ministry">
+                        Step 1: Select Ministry{" "}
+                        <span className="text-destructive">*</span>
+                      </Label>
+                      <div className="relative">
+                        <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground z-10" />
+                        <Select
+                          value={
+                            formData.parent_ministry_id
+                              ? String(formData.parent_ministry_id)
+                              : ""
+                          }
+                          onValueChange={(value) =>
+                            handleChange("parent_ministry_id", value)
+                          }
+                          required
+                        >
+                          <SelectTrigger className="pl-10">
+                            <SelectValue placeholder="Select governing ministry" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {ministries.length > 0 ? (
+                              ministries.map((ministry) => (
+                                <SelectItem
+                                  key={ministry.id}
+                                  value={String(ministry.id)}
+                                >
+                                  {ministry.name}
+                                </SelectItem>
+                              ))
+                            ) : (
+                              <SelectItem value="none" disabled>
+                                No ministries available
+                              </SelectItem>
+                            )}
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      {ministries.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No ministries found. Please contact administrator.
+                        </p>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Step 2: Select Institution */}
+                  <div className="space-y-2">
+                    <Label htmlFor="institution">
+                      {selectedRole?.institutionType === "university"
+                        ? "Step 2: Select Institution"
+                        : "Ministry"}{" "}
+                      <span className="text-destructive">*</span>
+                    </Label>
+                    <div className="relative">
+                      <Building2 className="absolute left-3 top-3 h-4 w-4 text-muted-foreground z-10" />
+                      <Select
+                        value={
+                          formData.institution_id
+                            ? String(formData.institution_id)
+                            : ""
+                        }
+                        onValueChange={(value) =>
+                          handleChange("institution_id", value)
+                        }
+                        required={showInstitutionField}
+                        disabled={
+                          selectedRole?.institutionType === "university" &&
+                          !formData.parent_ministry_id
+                        }
+                      >
+                        <SelectTrigger className="pl-10">
+                          <SelectValue
+                            placeholder={
+                              selectedRole?.institutionType === "ministry"
+                                ? "Select ministry"
+                                : formData.parent_ministry_id
+                                ? "Select institution under selected ministry"
+                                : "Select ministry first"
+                            }
+                          />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {filteredInstitutions.length > 0 ? (
+                            filteredInstitutions.map((inst) => (
+                              <SelectItem key={inst.id} value={String(inst.id)}>
+                                {inst.name}
+                                {inst.location && ` - ${inst.location}`}
+                              </SelectItem>
+                            ))
+                          ) : (
+                            <SelectItem value="none" disabled>
+                              {selectedRole?.institutionType === "university" &&
+                              !formData.parent_ministry_id
+                                ? "Please select a ministry first"
+                                : `No ${
+                                    selectedRole?.institutionType === "ministry"
+                                      ? "ministries"
+                                      : "institutions"
+                                  } available`}
+                            </SelectItem>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    {selectedRole?.institutionType === "university" &&
+                      formData.parent_ministry_id &&
+                      filteredInstitutions.length === 0 && (
+                        <p className="text-xs text-muted-foreground">
+                          No institutions found under selected ministry. Please
+                          contact administrator.
+                        </p>
+                      )}
                   </div>
-                </div>
+                </>
               )}
 
               <div className="space-y-2">

@@ -61,7 +61,7 @@ notification = Notification(
 
 ```python
 notification = Notification(
-    user_id=moe_admin.id,
+    user_id=MINISTRY_ADMIN.id,
     type="document_approval",
     title="New Document Pending Review",
     message=f"Document '{doc.filename}' has been submitted for MoE approval by {current_user.name}",

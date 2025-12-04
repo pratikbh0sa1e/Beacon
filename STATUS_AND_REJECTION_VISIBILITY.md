@@ -267,7 +267,7 @@ If you want to show rejection reason ONLY to specific roles, here's how:
     docData.approval_status === "changes_requested") &&
     docData.rejection_reason &&
     (user?.role === "developer" ||
-      user?.role === "moe_admin" ||
+      user?.role === "ministry_admin" ||
       user?.role === "university_admin" ||
       user?.id === docData.uploader?.id) && (
       <div className="bg-red-50 dark:bg-red-900/20 border border-red-200">

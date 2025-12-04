@@ -114,14 +114,14 @@ def send_hierarchical_notification(
             db.add(notif)
             notifications_created.append(notif)
     
-    # Rule 3: University Admin → MoE Admin ONLY if document is escalated
+    # Rule 3: University Admin → Ministry Admin ONLY if document is escalated
     elif sender.role == "university_admin":
         if document_escalated:
-            # Send to MoE Admin
-            moe_admins = db.query(User).filter(User.role == "moe_admin").all()
-            for moe in moe_admins:
+            # Send to Ministry Admin
+            ministry_admins = db.query(User).filter(User.role == "ministry_admin").all()
+            for ministry_admin in ministry_admins:
                 notif = Notification(
-                    user_id=moe.id,
+                    user_id=ministry_admin.id,
                     type=notification_type,
                     title=title,
                     message=message,
@@ -147,8 +147,8 @@ def send_hierarchical_notification(
             db.add(notif)
             notifications_created.append(notif)
     
-    # Rule 4: MoE Admin → Developer only
-    elif sender.role == "moe_admin":
+    # Rule 4: Ministry Admin → Developer only
+    elif sender.role == "ministry_admin":
         developers = db.query(User).filter(User.role == "developer").all()
         for dev in developers:
             notif = Notification(

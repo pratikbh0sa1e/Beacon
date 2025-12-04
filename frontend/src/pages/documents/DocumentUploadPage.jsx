@@ -284,7 +284,7 @@ const FileFormItem = ({ item, onRemove, onUpdate, institutions, userRole }) => {
       ? "border-success/50"
       : "border-border/50";
   // ✅ Helper: Check if user is Super Admin
-  const canSelectInstitution = [ROLES.DEVELOPER, ROLES.MOE_ADMIN].includes(
+  const canSelectInstitution = [ROLES.DEVELOPER, ROLES.MINISTRY_ADMIN].includes(
     userRole
   );
   return (

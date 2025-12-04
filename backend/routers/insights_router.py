@@ -49,7 +49,7 @@ async def get_document_stats(
             # Developer: Full access to all documents
             pass  # No filters
         
-        elif current_user.role == "moe_admin":
+        elif current_user.role == "ministry_admin":
             # MoE Admin: LIMITED access (respects institutional autonomy)
             query = query.filter(
                 or_(
@@ -243,7 +243,7 @@ async def get_trending_topics(
         if current_user.role == "developer":
             pass  # Full access
         
-        elif current_user.role == "moe_admin":
+        elif current_user.role == "ministry_admin":
             # MoE Admin: LIMITED access
             query = query.filter(
                 or_(
@@ -366,7 +366,7 @@ async def get_recent_activity(
             query = query.filter(AuditLog.action == activity_type)
         
         # Role-based filtering
-        if current_user.role not in ["developer", "moe_admin"]:
+        if current_user.role not in ["developer", "ministry_admin"]:
             # Non-admins only see their own activity or public actions
             query = query.filter(AuditLog.user_id == current_user.id)
         
@@ -424,7 +424,7 @@ async def get_search_analytics(
     """
     try:
         # Only admins can see search analytics
-        if current_user.role not in ["developer", "moe_admin"]:
+        if current_user.role not in ["developer", "ministry_admin"]:
             raise HTTPException(
                 status_code=403, 
                 detail="Only administrators can view search analytics"
@@ -513,7 +513,7 @@ async def get_user_activity(
     """
     try:
         # Only admins can see user activity
-        if current_user.role not in ["developer", "moe_admin"]:
+        if current_user.role not in ["developer", "ministry_admin"]:
             raise HTTPException(
                 status_code=403, 
                 detail="Only administrators can view user activity"
@@ -587,7 +587,7 @@ async def get_institution_stats(
     """
     try:
         # Only admins can see institution stats
-        if current_user.role not in ["developer", "moe_admin"]:
+        if current_user.role not in ["developer", "ministry_admin"]:
             raise HTTPException(
                 status_code=403, 
                 detail="Only administrators can view institution statistics"
@@ -671,7 +671,7 @@ async def get_dashboard_summary(
         if current_user.role == "developer":
             pass  # Full access
         
-        elif current_user.role == "moe_admin":
+        elif current_user.role == "ministry_admin":
             # MoE Admin: LIMITED access
             doc_query = doc_query.filter(
                 or_(
@@ -724,7 +724,7 @@ async def get_dashboard_summary(
         
         # Pending approvals (admin only)
         pending_approvals = 0
-        if current_user.role in ["developer", "moe_admin", "university_admin"]:
+        if current_user.role in ["developer", "ministry_admin", "university_admin"]:
             pending_query = db.query(Document).filter(
                 Document.approval_status == "pending"
             )
@@ -736,7 +736,7 @@ async def get_dashboard_summary(
         
         # Total users (admin only)
         total_users = 0
-        if current_user.role in ["developer", "moe_admin"]:
+        if current_user.role in ["developer", "ministry_admin"]:
             total_users = db.query(User).count()
         
         # Recent uploads (last 7 days)
@@ -747,7 +747,7 @@ async def get_dashboard_summary(
         
         # Recent searches (last 7 days, admin only)
         recent_searches = 0
-        if current_user.role in ["developer", "moe_admin"]:
+        if current_user.role in ["developer", "ministry_admin"]:
             recent_searches = db.query(AuditLog).filter(
                 and_(
                     AuditLog.action == "search_query",

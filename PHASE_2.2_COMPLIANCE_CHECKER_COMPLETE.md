@@ -9,6 +9,7 @@
 **Every compliance check validates user access to the document:**
 
 ### Access Rules:
+
 1. **Developer:** Can check any document
 2. **MoE Admin:** LIMITED access
    - Public documents
@@ -31,12 +32,14 @@
 **Class: ComplianceChecker**
 
 **Methods:**
+
 - `check_compliance(document, checklist, strict_mode)` - Full compliance check
 - `quick_check(document, criterion)` - Single criterion check
 - `batch_check(documents, checklist)` - Check multiple documents
 - `generate_compliance_report(document, checklist)` - Detailed report with recommendations
 
 **Features:**
+
 - Uses Gemini 2.0 Flash LLM
 - Verifies document against compliance criteria
 - Provides evidence from document text
@@ -45,6 +48,7 @@
 - Generates actionable recommendations
 
 **Limits:**
+
 - Maximum: 20 checklist items per check
 - Maximum: 10 documents in batch check
 - Text limit: 4000 chars per document
@@ -54,6 +58,7 @@
 #### Endpoint 1: `POST /documents/{id}/check-compliance`
 
 **Request:**
+
 ```json
 {
   "checklist": [
@@ -67,6 +72,7 @@
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -115,17 +121,16 @@
 #### Endpoint 2: `POST /documents/{id}/compliance-report`
 
 **Request:**
+
 ```json
 {
-  "checklist": [
-    "Has budget allocation",
-    "Has implementation timeline"
-  ],
+  "checklist": ["Has budget allocation", "Has implementation timeline"],
   "strict_mode": true
 }
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -155,6 +160,7 @@
 ## Files Created
 
 1. **`Agent/tools/compliance_tools.py`** (450+ lines)
+
    - ComplianceChecker class
    - LLM-based verification logic
    - Batch checking capability
@@ -180,6 +186,7 @@
 ## How It Works
 
 ### Step 1: User Requests Compliance Check
+
 ```bash
 curl -X POST "http://localhost:8000/documents/1/check-compliance" \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -194,11 +201,12 @@ curl -X POST "http://localhost:8000/documents/1/check-compliance" \
 ```
 
 ### Step 2: Role-Based Access Check
+
 ```python
 # Check if user has access to document
 if user.role == "developer":
     has_access = True
-elif user.role == "moe_admin":
+elif user.role == "ministry_admin":
     has_access = (doc.visibility == "public" or
                   doc.approval_status == "pending" or
                   doc.institution_id == user.institution_id or
@@ -207,11 +215,13 @@ elif user.role == "moe_admin":
 ```
 
 ### Step 3: Fetch Document Data
+
 - Retrieves document text
 - Fetches metadata (title, summary, department)
 - Limits text to 4000 chars
 
 ### Step 4: LLM Compliance Check
+
 - Sends document + checklist to Gemini 2.0 Flash
 - LLM analyzes document for each criterion
 - Extracts evidence from document text
@@ -219,6 +229,7 @@ elif user.role == "moe_admin":
 - Identifies location of evidence
 
 ### Step 5: Return Results
+
 - Structured JSON response
 - Pass/fail for each criterion
 - Evidence with quotes
@@ -231,24 +242,25 @@ elif user.role == "moe_admin":
 ## Use Cases
 
 ### 1. Policy Compliance Verification
+
 **Scenario:** MoE admin checks if university policy meets MoE standards
 
 ```javascript
-const response = await fetch('/documents/5/check-compliance', {
-  method: 'POST',
+const response = await fetch("/documents/5/check-compliance", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
     checklist: [
-      'Aligns with NEP 2020',
-      'Has budget allocation',
-      'Includes implementation timeline',
-      'Approved by governing body'
+      "Aligns with NEP 2020",
+      "Has budget allocation",
+      "Includes implementation timeline",
+      "Approved by governing body",
     ],
-    strict_mode: true
-  })
+    strict_mode: true,
+  }),
 });
 
 const data = await response.json();
@@ -256,49 +268,50 @@ const data = await response.json();
 ```
 
 ### 2. Document Approval Workflow
+
 **Scenario:** University admin checks document before submitting for MoE review
 
 ```javascript
 // Check compliance before submission
-const response = await fetch('/documents/10/compliance-report', {
-  method: 'POST',
+const response = await fetch("/documents/10/compliance-report", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
     checklist: [
-      'Has executive summary',
-      'Includes financial projections',
-      'Signed by authorized official'
-    ]
-  })
+      "Has executive summary",
+      "Includes financial projections",
+      "Signed by authorized official",
+    ],
+  }),
 });
 
 const report = await response.json();
 if (report.action_required) {
   // Show non-compliant items and recommendations
-  alert(`Please address ${report.non_compliant_items.length} items before submission`);
+  alert(
+    `Please address ${report.non_compliant_items.length} items before submission`
+  );
 }
 ```
 
 ### 3. Student Document Verification
+
 **Scenario:** Student checks if public guideline meets specific criteria
 
 ```javascript
 // Student can only check approved public documents
-const response = await fetch('/documents/15/check-compliance', {
-  method: 'POST',
+const response = await fetch("/documents/15/check-compliance", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${studentToken}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${studentToken}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    checklist: [
-      'Applicable to undergraduate programs',
-      'Effective from 2024'
-    ]
-  })
+    checklist: ["Applicable to undergraduate programs", "Effective from 2024"],
+  }),
 });
 ```
 
@@ -307,11 +320,13 @@ const response = await fetch('/documents/15/check-compliance', {
 ## Problem Statement Alignment
 
 ### ✅ Addresses:
+
 - **"Quick and accurate decision making"** - Automated compliance verification
 - **"Analyze data from multiple sources"** - Verifies against multiple criteria
 - **"Draw insights"** - Provides evidence and recommendations
 
 ### Impact:
+
 This is a **CRITICAL FEATURE** for decision-makers. Officials need to verify if documents meet compliance standards before approval or implementation.
 
 ---
@@ -319,21 +334,25 @@ This is a **CRITICAL FEATURE** for decision-makers. Officials need to verify if 
 ## Security Features
 
 ### 1. Role-Based Access
+
 - Every compliance check validates document access
 - Users can't check documents they don't have access to
 - Returns 403 Forbidden if access denied
 
 ### 2. Input Validation
+
 - Maximum 20 checklist items
 - Checklist cannot be empty
 - Document must exist
 
 ### 3. Audit Trail
+
 - All compliance checks logged in audit_logs table
 - Tracks: user_id, document_id, checklist_items, compliance_status
 - Enables compliance monitoring
 
 ### 4. Evidence-Based Results
+
 - LLM provides exact quotes from document
 - Confidence levels for each result
 - Location information (section/paragraph)
@@ -343,16 +362,19 @@ This is a **CRITICAL FEATURE** for decision-makers. Officials need to verify if 
 ## Performance Considerations
 
 ### Response Time
+
 - Typical: 5-8 seconds for 5 criteria
 - Depends on: document length, number of criteria
 - Strict mode may take slightly longer
 
 ### Token Limits
+
 - Text limited to 4000 chars per document
 - Prevents exceeding LLM token limits
 - Ensures fast response times
 
 ### Optimization Tips
+
 - Use fewer criteria for faster results
 - Use strict_mode=False for quicker checks
 - Cache compliance results for 1 hour
@@ -394,15 +416,18 @@ python tests/test_compliance_api.py
 ## API Documentation
 
 ### Interactive Docs
+
 Visit: http://localhost:8000/docs
 
 Look for:
+
 - `POST /documents/{id}/check-compliance`
 - `POST /documents/{id}/compliance-report`
 
 ### Request Models
 
 **ComplianceRequest:**
+
 ```python
 {
   "checklist": List[str],  # 1-20 criteria
@@ -411,6 +436,7 @@ Look for:
 ```
 
 **Strict Mode:**
+
 - `False`: LLM can infer from context
 - `True`: Requires explicit evidence in document
 
@@ -419,6 +445,7 @@ Look for:
 ## Error Responses
 
 ### 400 Bad Request
+
 ```json
 {
   "detail": "Checklist cannot be empty"
@@ -426,6 +453,7 @@ Look for:
 ```
 
 ### 403 Forbidden
+
 ```json
 {
   "detail": "You don't have access to document 5"
@@ -433,6 +461,7 @@ Look for:
 ```
 
 ### 404 Not Found
+
 ```json
 {
   "detail": "Document 10 not found"
@@ -440,6 +469,7 @@ Look for:
 ```
 
 ### 500 Internal Server Error
+
 ```json
 {
   "detail": "Compliance check failed: [error message]"
@@ -451,12 +481,14 @@ Look for:
 ## Next Steps
 
 ### Complete Phase 2 (→ 8.5/10):
+
 1. ✅ Task 2.1: Policy Comparison (COMPLETE)
 2. ✅ Task 2.2: Compliance Checker (COMPLETE)
 3. ⏳ Task 2.3: Conflict Detection Enhancement (6h)
 4. ⏳ Task 2.4: AI-Generated Insights (8h)
 
 ### Frontend Integration:
+
 1. Create ComplianceCheckPage component
 2. Add checklist builder UI
 3. Display results with evidence
@@ -469,6 +501,7 @@ Look for:
 ## Summary
 
 **What Was Built:**
+
 - LLM-based compliance checker
 - 2 API endpoints with role-based access
 - Evidence-based verification
@@ -476,6 +509,7 @@ Look for:
 - Comprehensive test suite
 
 **Key Features:**
+
 - ✅ 100% role-based access control
 - ✅ LLM-powered analysis (Gemini 2.0 Flash)
 - ✅ Evidence extraction with quotes
@@ -484,6 +518,7 @@ Look for:
 - ✅ Audit trail logging
 
 **Impact:**
+
 - Automates compliance verification
 - Reduces manual review time
 - Provides evidence-based results

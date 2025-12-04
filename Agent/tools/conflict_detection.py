@@ -205,7 +205,7 @@ class ConflictDetector:
             # Full access
             pass
         
-        elif user_role == "moe_admin":
+        elif user_role == "ministry_admin":
             # Limited access (respects institutional autonomy)
             query = query.filter(
                 or_(

@@ -399,7 +399,7 @@ async def upload_documents(
         
         # 5. Create Document
         # MoE Admin and Developer don't need approval - their uploads are auto-approved
-        initial_status = "approved" if current_user.role in ["moe_admin", "developer"] else "draft"
+        initial_status = "approved" if current_user.role in ["ministry_admin", "developer"] else "draft"
         
         doc = Document(
             filename=file.filename,
@@ -414,8 +414,8 @@ async def upload_documents(
             download_allowed=download_allowed,
             version=version,
             user_description=description,
-            approved_by=current_user.id if current_user.role in ["moe_admin", "developer"] else None,
-            approved_at=datetime.utcnow() if current_user.role in ["moe_admin", "developer"] else None
+            approved_by=current_user.id if current_user.role in ["ministry_admin", "developer"] else None,
+            approved_at=datetime.utcnow() if current_user.role in ["ministry_admin", "developer"] else None
         )
         db.add(doc)
         db.commit()
@@ -546,7 +546,7 @@ async def list_documents(
         pass  # No filters - sees all documents
 
     # 2. MOE ADMIN: Respects institutional autonomy
-    elif current_user.role == "moe_admin":
+    elif current_user.role == "ministry_admin":
         # MOE Admin can ONLY see:
         # a) Public documents (everyone can see)
         # b) Documents pending approval (requires_moe_approval)
@@ -626,12 +626,44 @@ async def list_documents(
     if current_user.role == "developer":
         # Developer sees everything
         pass
-    elif current_user.role in ["moe_admin", "university_admin"]:
-        # Admins see: approved, pending, under_review, changes_requested, rejected, and their own drafts
+    elif current_user.role == "ministry_admin":
+        # Ministry Admin: Only see documents from institutions under their ministry
+        child_institution_ids = db.query(Institution.id).filter(
+            Institution.parent_ministry_id == current_user.institution_id,
+            Institution.deleted_at == None
+        ).all()
+        child_institution_ids = [inst_id[0] for inst_id in child_institution_ids]
+        
         query = query.filter(
             or_(
-                Document.approval_status.in_(["approved", "pending", "under_review", "changes_requested", "rejected", "archived", "flagged"]),
-                Document.uploader_id == current_user.id  # Their own drafts
+                # Public approved documents (everyone sees)
+                and_(
+                    Document.approval_status == "approved",
+                    Document.visibility_level == "public"
+                ),
+                # Documents from their institutions (any status)
+                and_(
+                    Document.institution_id.in_(child_institution_ids),
+                    Document.approval_status.in_(["pending", "under_review", "changes_requested", "rejected", "approved", "draft"])
+                ),
+                # Their own uploads
+                Document.uploader_id == current_user.id
+            )
+        )
+    
+    elif current_user.role == "university_admin":
+        # University Admin: Only see documents from their institution
+        query = query.filter(
+            or_(
+                # Public approved documents
+                and_(
+                    Document.approval_status == "approved",
+                    Document.visibility_level == "public"
+                ),
+                # Documents from their institution (any status)
+                Document.institution_id == current_user.institution_id,
+                # Their own uploads
+                Document.uploader_id == current_user.id
             )
         )
     elif current_user.role == "document_officer":
@@ -822,7 +854,7 @@ async def get_document(
             return True
         
         # MOE Admin: Institutional autonomy rules
-        if user_role == "moe_admin":
+        if user_role == "ministry_admin":
             # Can access if:
             # a) Document is pending approval (university requesting MOE review)
             if approval_status == "pending":
@@ -1021,7 +1053,7 @@ async def download_document(
             return True
         
         # MOE Admin: Institutional autonomy
-        if user_role == "moe_admin":
+        if user_role == "ministry_admin":
             if approval_status == "pending":
                 return True
             if user_institution and user_institution == doc_institution:
@@ -1060,7 +1092,7 @@ async def download_document(
     # 1. Security Check: Is download allowed?
     if not doc.download_allowed:
         # Extra check: Admins/Owners usually bypass this, but for now we enforce it strictly
-        if current_user.role not in ["developer", "moe_admin"] and current_user.id != doc.uploader_id:
+        if current_user.role not in ["developer", "ministry_admin"] and current_user.id != doc.uploader_id:
              raise HTTPException(status_code=403, detail="Download not allowed for this document")
     
     # 2. Check if file is stored in S3/Supabase or locally
@@ -1227,25 +1259,53 @@ async def submit_document_for_review(
     doc.escalated_at = datetime.utcnow()
     db.commit()
     
-    # Create notification for MoE Admin
+    # Create notification for Ministry Admin of the parent ministry
     from backend.database import Notification
-    moe_admins = db.query(User).filter(User.role == "moe_admin").all()
     
-    for moe_admin in moe_admins:
-        notification = Notification(
-            user_id=moe_admin.id,
-            type="document_approval",
-            title="New Document Pending Review",
-            message=f"Document '{doc.filename}' has been submitted for MoE approval by {current_user.name}",
-            priority="high",
-            action_url=f"/approvals/{document_id}",
-            action_metadata={
-                "document_id": document_id,
-                "submitter_id": current_user.id,
-                "institution_id": doc.institution_id
-            }
-        )
-        db.add(notification)
+    # Get the institution to find its parent ministry
+    institution = db.query(Institution).filter(Institution.id == doc.institution_id).first()
+    
+    if institution and institution.parent_ministry_id:
+        # Get ministry admins of the parent ministry only
+        ministry_admins = db.query(User).filter(
+            User.role == "ministry_admin",
+            User.institution_id == institution.parent_ministry_id
+        ).all()
+        
+        for ministry_admin in ministry_admins:
+            notification = Notification(
+                user_id=ministry_admin.id,
+                type="document_approval",
+                title="New Document Pending Review",
+                message=f"Document '{doc.filename}' has been submitted for approval by {current_user.name} from {institution.name}",
+                priority="high",
+                action_url=f"/approvals/{document_id}",
+                action_metadata={
+                    "document_id": document_id,
+                    "submitter_id": current_user.id,
+                    "institution_id": doc.institution_id,
+                    "parent_ministry_id": institution.parent_ministry_id
+                }
+            )
+            db.add(notification)
+    else:
+        # Fallback: If no parent ministry, notify all ministry admins (shouldn't happen)
+        ministry_admins = db.query(User).filter(User.role == "ministry_admin").all()
+        for ministry_admin in ministry_admins:
+            notification = Notification(
+                user_id=ministry_admin.id,
+                type="document_approval",
+                title="New Document Pending Review",
+                message=f"Document '{doc.filename}' has been submitted for approval by {current_user.name}",
+                priority="high",
+                action_url=f"/approvals/{document_id}",
+                action_metadata={
+                    "document_id": document_id,
+                    "submitter_id": current_user.id,
+                    "institution_id": doc.institution_id
+                }
+            )
+            db.add(notification)
     
     # Notify Developer (copy)
     developers = db.query(User).filter(User.role == "developer").all()
@@ -1289,7 +1349,7 @@ async def approve_document(
     
     if current_user.role == "developer":
         can_approve = True
-    elif current_user.role == "moe_admin" and doc.requires_moe_approval:
+    elif current_user.role == "ministry_admin" and doc.requires_moe_approval:
         can_approve = True
     elif current_user.role == "university_admin" and current_user.institution_id == doc.institution_id:
         can_approve = True
@@ -1344,7 +1404,7 @@ async def reject_document(
     
     if current_user.role == "developer":
         can_reject = True
-    elif current_user.role == "moe_admin" and doc.requires_moe_approval:
+    elif current_user.role == "ministry_admin" and doc.requires_moe_approval:
         can_reject = True
     elif current_user.role == "university_admin" and current_user.institution_id == doc.institution_id:
         can_reject = True
@@ -1400,7 +1460,7 @@ async def request_changes(
     
     if current_user.role == "developer":
         can_request = True
-    elif current_user.role == "moe_admin" and doc.requires_moe_approval:
+    elif current_user.role == "ministry_admin" and doc.requires_moe_approval:
         can_request = True
     elif current_user.role == "university_admin" and current_user.institution_id == doc.institution_id:
         can_request = True
@@ -1451,11 +1511,19 @@ async def get_pending_approvals(
     )
     
     # Filter based on role
-    if current_user.role == "moe_admin":
-        # MoE sees documents that require MoE approval
+    if current_user.role == "ministry_admin":
+        # Ministry Admin sees documents from institutions under their ministry only
+        # Get all institutions under this ministry
+        child_institution_ids = db.query(Institution.id).filter(
+            Institution.parent_ministry_id == current_user.institution_id,
+            Institution.deleted_at == None
+        ).all()
+        child_institution_ids = [inst_id[0] for inst_id in child_institution_ids]
+        
         query = query.filter(
             Document.approval_status == "pending",
-            Document.requires_moe_approval == True
+            Document.requires_moe_approval == True,
+            Document.institution_id.in_(child_institution_ids)  # Only from their institutions
         )
     elif current_user.role == "university_admin":
         # University Admin sees pending docs from their institution
@@ -1514,7 +1582,7 @@ async def update_document_status(
         raise HTTPException(status_code=404, detail="Document not found")
     
     # Check permissions
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Only admins can update document status")
     
     if current_user.role == "university_admin" and current_user.institution_id != doc.institution_id:
@@ -1607,7 +1675,7 @@ async def compare_documents(
                 has_access = True
             
             # 2. MOE ADMIN: Respects institutional autonomy
-            elif current_user.role == "moe_admin":
+            elif current_user.role == "ministry_admin":
                 # MOE Admin can ONLY see:
                 # a) Public documents
                 # b) Documents pending approval (requires_moe_approval)
@@ -1762,7 +1830,7 @@ async def detect_conflicts(
                 has_access = True
             
             # 2. MOE ADMIN: Limited access (respects institutional autonomy)
-            elif current_user.role == "moe_admin":
+            elif current_user.role == "ministry_admin":
                 if (doc.visibility_level == "public" or
                     doc.approval_status == "pending" or
                     doc.institution_id == current_user.institution_id or
@@ -1920,7 +1988,7 @@ async def check_document_compliance(
             has_access = True
         
         # 2. MOE ADMIN: Limited access (respects institutional autonomy)
-        elif current_user.role == "moe_admin":
+        elif current_user.role == "ministry_admin":
             if (doc.visibility_level == "public" or
                 doc.approval_status == "pending" or
                 doc.institution_id == current_user.institution_id or
@@ -2069,7 +2137,7 @@ async def generate_compliance_report(
         
         if current_user.role == "developer":
             has_access = True
-        elif current_user.role == "moe_admin":
+        elif current_user.role == "ministry_admin":
             if (doc.visibility_level == "public" or
                 doc.approval_status == "pending" or
                 doc.institution_id == current_user.institution_id or
@@ -2224,7 +2292,7 @@ async def detect_document_conflicts(
             has_access = True
         
         # 2. MOE ADMIN: Limited access (respects institutional autonomy)
-        elif current_user.role == "moe_admin":
+        elif current_user.role == "ministry_admin":
             if (doc.visibility_level == "public" or
                 doc.approval_status == "pending" or
                 doc.institution_id == current_user.institution_id or

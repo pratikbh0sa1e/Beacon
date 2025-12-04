@@ -85,7 +85,7 @@ escalated_at = Column(DateTime, nullable=True)
 
 **Route Added:** `/approvals`
 
-**Access Control:** Only `developer`, `moe_admin`, `university_admin`
+**Access Control:** Only `developer`, `MINISTRY_ADMIN`, `university_admin`
 
 ---
 
@@ -227,7 +227,7 @@ All endpoints in `backend/routers/document_router.py`:
 3. **Sidebar** (`frontend/src/components/layout/Sidebar.jsx`)
 
    - Added "Document Approvals" menu item
-   - Visible to: developer, moe_admin, university_admin
+   - Visible to: developer, MINISTRY_ADMIN, university_admin
    - Renamed old "Approvals" to "User Approvals" for clarity
 
 4. **API Service** (`frontend/src/services/api.js`)

@@ -7,33 +7,40 @@ I've successfully implemented a complete role-based RAG system with centralized 
 ## 🎯 Problems Solved
 
 ### 1. Multi-Machine Access ✅
+
 **Before**: Documents uploaded on PC1 couldn't be accessed from PC2
 **After**: All embeddings stored in PostgreSQL (pgvector), accessible from any machine
 
 ### 2. Role-Based Access Control ✅
+
 **Before**: RAG searched ALL documents regardless of user permissions
 **After**: RAG respects user roles and only searches documents they can access
 
 ### 3. S3 File Retrieval ✅
+
 **Before**: Files stored locally, not accessible across machines
 **After**: Files fetched from Supabase S3, accessible anywhere
 
 ### 4. Approval Status in Citations ✅
+
 **Before**: No way to know if cited documents were approved
 **After**: Every citation includes approval_status (approved/pending)
 
 ## 📁 Files Created
 
 ### Core Implementation
+
 1. **`Agent/vector_store/pgvector_store.py`** - Centralized vector store using PostgreSQL
 2. **`scripts/enable_pgvector.py`** - Database setup script
 3. **`scripts/batch_embed_documents.py`** - Batch embedding utility
 
 ### Setup Scripts
+
 4. **`scripts/setup_role_based_rag.sh`** - Linux/Mac setup
 5. **`scripts/setup_role_based_rag.bat`** - Windows setup
 
 ### Documentation
+
 6. **`ROLE_BASED_RAG_IMPLEMENTATION.md`** - Complete technical documentation
 7. **`QUICK_START_ROLE_BASED_RAG.md`** - Quick start guide
 8. **`IMPLEMENTATION_COMPLETE.md`** - This file
@@ -41,24 +48,29 @@ I've successfully implemented a complete role-based RAG system with centralized 
 ## 📝 Files Modified
 
 1. **`backend/database.py`**
+
    - Added `DocumentEmbedding` table with pgvector support
    - Includes denormalized fields for efficient filtering
 
 2. **`Agent/tools/lazy_search_tools.py`**
+
    - Updated to use pgvector instead of FAISS
    - Added role-based filtering parameters
    - Includes approval status in results
 
 3. **`Agent/rag_agent/react_agent.py`**
+
    - Added user context (role, institution_id)
    - Created wrapper methods to inject context into tools
    - Updated query methods to accept user context
 
 4. **`backend/routers/chat_router.py`**
+
    - Pass current_user.role and institution_id to RAG agent
    - Both streaming and non-streaming endpoints updated
 
 5. **`Agent/lazy_rag/lazy_embedder.py`**
+
    - Switched from FAISS to pgvector
    - Added S3 file fetching capability
    - Stores embeddings with access control metadata
@@ -84,11 +96,13 @@ python main.py
 ### Or use the setup script:
 
 **Windows:**
+
 ```bash
 scripts\setup_role_based_rag.bat
 ```
 
 **Linux/Mac:**
+
 ```bash
 chmod +x scripts/setup_role_based_rag.sh
 ./scripts/setup_role_based_rag.sh
@@ -96,18 +110,19 @@ chmod +x scripts/setup_role_based_rag.sh
 
 ## 🔒 Role-Based Access Rules
 
-| Role | Access Level |
-|------|-------------|
-| **Developer** | All documents (god mode) |
-| **MoE Admin** | Public + Restricted + All institution_only docs |
+| Role                 | Access Level                                                      |
+| -------------------- | ----------------------------------------------------------------- |
+| **Developer**        | All documents (god mode)                                          |
+| **MoE Admin**        | Public + Restricted + All institution_only docs                   |
 | **University Admin** | Public + Their institution's docs (institution_only + restricted) |
-| **Document Officer** | Same as their role permissions |
-| **Student** | Public + Their institution's institution_only docs |
-| **Public Viewer** | Public docs only |
+| **Document Officer** | Same as their role permissions                                    |
+| **Student**          | Public + Their institution's institution_only docs                |
+| **Public Viewer**    | Public docs only                                                  |
 
 ## 📊 Technical Details
 
 ### Database Schema
+
 ```sql
 CREATE TABLE document_embeddings (
     id SERIAL PRIMARY KEY,
@@ -130,6 +145,7 @@ CREATE INDEX idx_approval_status ON document_embeddings(approval_status);
 ```
 
 ### Query Flow
+
 ```
 User Query
     ↓
@@ -149,6 +165,7 @@ Frontend (displays with badges)
 ```
 
 ### Role Filtering Logic
+
 ```python
 # Developer - No filtering
 WHERE 1=1
@@ -158,12 +175,12 @@ WHERE visibility_level IN ('public', 'restricted', 'institution_only')
 
 # University Admin
 WHERE visibility_level = 'public'
-   OR (visibility_level IN ('institution_only', 'restricted') 
+   OR (visibility_level IN ('institution_only', 'restricted')
        AND institution_id = user_institution_id)
 
 # Student/Others
 WHERE visibility_level = 'public'
-   OR (visibility_level = 'institution_only' 
+   OR (visibility_level = 'institution_only'
        AND institution_id = user_institution_id)
 
 # All roles
@@ -173,10 +190,11 @@ AND approval_status IN ('approved', 'pending')
 ## 🧪 Testing
 
 ### Test Role-Based Access
+
 ```bash
 # As MoE Admin (sees all MoE docs)
 curl -X POST http://localhost:8000/api/chat/query \
-  -H "Authorization: Bearer <moe_admin_token>" \
+  -H "Authorization: Bearer <MINISTRY_ADMIN_token>" \
   -d '{"question": "What are the policies?"}'
 
 # As Student (sees only public + their institution)
@@ -186,6 +204,7 @@ curl -X POST http://localhost:8000/api/chat/query \
 ```
 
 ### Test Approval Status
+
 ```bash
 # Query and check citations
 curl -X POST http://localhost:8000/api/chat/query \
@@ -214,9 +233,11 @@ curl -X POST http://localhost:8000/api/chat/query \
 ## 🔄 Migration Path
 
 ### Existing Documents
+
 Documents will be automatically embedded on first query (lazy embedding).
 
 ### Batch Embedding (Optional)
+
 ```bash
 # Embed all documents
 python scripts/batch_embed_documents.py
@@ -226,7 +247,9 @@ python scripts/batch_embed_documents.py 1 2 3 4 5
 ```
 
 ### Old FAISS Files
+
 Files in `Agent/vector_store/documents/{doc_id}/` are no longer used. You can:
+
 - Keep them (no harm)
 - Delete them (free up space)
 
@@ -236,17 +259,21 @@ Update citation display to show approval status:
 
 ```jsx
 // Example React component
-{citation.approval_status === 'approved' ? (
-  <Badge color="green">✅ Approved</Badge>
-) : (
-  <Badge color="yellow">⏳ Pending Approval</Badge>
-)}
+{
+  citation.approval_status === "approved" ? (
+    <Badge color="green">✅ Approved</Badge>
+  ) : (
+    <Badge color="yellow">⏳ Pending Approval</Badge>
+  );
+}
 ```
 
 ## 🐛 Troubleshooting
 
 ### "pgvector extension not found"
+
 Install pgvector in PostgreSQL:
+
 ```bash
 # Ubuntu/Debian
 sudo apt install postgresql-15-pgvector
@@ -256,13 +283,17 @@ brew install pgvector
 ```
 
 ### "No results found"
+
 Run batch embedding:
+
 ```bash
 python scripts/batch_embed_documents.py
 ```
 
 ### "Access denied"
+
 Check:
+
 1. User role in database
 2. Document visibility_level
 3. User institution_id matches document
@@ -283,6 +314,7 @@ Check:
 ## 🎉 Result
 
 Your RAG system now:
+
 - ✅ Works across multiple machines
 - ✅ Enforces role-based access control
 - ✅ Uses S3 for file storage

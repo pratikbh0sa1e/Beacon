@@ -182,14 +182,14 @@ class PGVectorStore:
         Returns:
             SQLAlchemy filter expression or None for no filtering
         """
-        from backend.constants.roles import DEVELOPER, MOE_ADMIN, UNIVERSITY_ADMIN
+        from backend.constants.roles import DEVELOPER, MINISTRY_ADMIN, UNIVERSITY_ADMIN
         
         # Developer sees everything
         if user_role == DEVELOPER:
             return None
         
         # MoE Admin sees public, restricted, and institution_only (all institutions)
-        elif user_role == MOE_ADMIN:
+        elif user_role == MINISTRY_ADMIN:
             return DocumentEmbedding.visibility_level.in_([
                 'public', 'restricted', 'institution_only'
             ])

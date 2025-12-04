@@ -44,7 +44,7 @@ Created a comprehensive Document Approvals page for administrators to review and
 
 - Imported `DocumentApprovalsPage`
 - Added route: `/admin/approvals`
-- Protected with `ADMIN_ROLES` (developer, moe_admin, university_admin)
+- Protected with `ADMIN_ROLES` (developer, MINISTRY_ADMIN, university_admin)
 
 **Route Structure:**
 
@@ -188,7 +188,7 @@ Created a comprehensive Document Approvals page for administrators to review and
 - Label: "Approvals"
 - Icon: Shield
 - Path: `/admin/approvals`
-- Visible to: ADMIN_ROLES (developer, moe_admin, university_admin)
+- Visible to: ADMIN_ROLES (developer, MINISTRY_ADMIN, university_admin)
 
 ---
 

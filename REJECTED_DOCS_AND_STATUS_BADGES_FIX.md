@@ -25,7 +25,7 @@
 **Before:**
 
 ```python
-elif current_user.role in ["moe_admin", "university_admin"]:
+elif current_user.role in ["ministry_admin", "university_admin"]:
     query = query.filter(
         or_(
             Document.approval_status.in_(["approved", "pending", "under_review", "changes_requested"]),
@@ -37,7 +37,7 @@ elif current_user.role in ["moe_admin", "university_admin"]:
 **After:**
 
 ```python
-elif current_user.role in ["moe_admin", "university_admin"]:
+elif current_user.role in ["ministry_admin", "university_admin"]:
     query = query.filter(
         or_(
             Document.approval_status.in_(["approved", "pending", "under_review", "changes_requested", "rejected", "archived", "flagged"]),

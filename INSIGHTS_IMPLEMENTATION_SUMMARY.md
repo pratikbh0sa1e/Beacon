@@ -9,6 +9,7 @@
 **Every single endpoint filters data by user role - NO user sees documents they shouldn't!**
 
 ### Access Rules:
+
 1. **Developer:** Full access to all documents
 2. **MoE Admin:** LIMITED access (respects institutional autonomy)
    - Public documents
@@ -23,6 +24,7 @@
 **IMPORTANT:** MoE Admin does NOT have full access. This respects institutional autonomy.
 
 Verified in code:
+
 - ✅ document-stats: Role filtering with MoE limited access
 - ✅ trending-topics: Role filtering with MoE limited access
 - ✅ recent-activity: Role filtering
@@ -78,15 +80,15 @@ elif current_user.role == "university_admin":
 
 ### Access Matrix
 
-| Endpoint | Student | Uni Admin | MoE Admin | Developer |
-|----------|---------|-----------|-----------|-----------|
-| dashboard-summary | Approved public only | Public + Institution | Public + Pending + Own | All docs |
-| document-stats | Approved public only | Public + Institution | Public + Pending + Own | All docs |
-| trending-topics | Approved public only | Public + Institution | Public + Pending + Own | All docs |
-| recent-activity | Own activity | Own activity | All activity | All activity |
-| search-analytics | ❌ Forbidden | ❌ Forbidden | ✅ Allowed | ✅ Allowed |
-| user-activity | ❌ Forbidden | ❌ Forbidden | ✅ Allowed | ✅ Allowed |
-| institution-stats | ❌ Forbidden | ❌ Forbidden | ✅ Allowed | ✅ Allowed |
+| Endpoint          | Student              | Uni Admin            | MoE Admin              | Developer    |
+| ----------------- | -------------------- | -------------------- | ---------------------- | ------------ |
+| dashboard-summary | Approved public only | Public + Institution | Public + Pending + Own | All docs     |
+| document-stats    | Approved public only | Public + Institution | Public + Pending + Own | All docs     |
+| trending-topics   | Approved public only | Public + Institution | Public + Pending + Own | All docs     |
+| recent-activity   | Own activity         | Own activity         | All activity           | All activity |
+| search-analytics  | ❌ Forbidden         | ❌ Forbidden         | ✅ Allowed             | ✅ Allowed   |
+| user-activity     | ❌ Forbidden         | ❌ Forbidden         | ✅ Allowed             | ✅ Allowed   |
+| institution-stats | ❌ Forbidden         | ❌ Forbidden         | ✅ Allowed             | ✅ Allowed   |
 
 **Note:** MoE Admin has LIMITED access to respect institutional autonomy. They see public docs, pending approvals, their institution's docs, and docs they uploaded.
 
@@ -97,10 +99,12 @@ elif current_user.role == "university_admin":
 ## Files Created/Modified
 
 ### Created:
+
 1. `backend/routers/insights_router.py` (600+ lines) - Complete API
 2. `tests/test_insights_api.py` - Test suite
 
 ### Modified:
+
 1. `backend/main.py` - Registered insights router
 2. `backend/routers/__init__.py` - Added exports
 
@@ -131,6 +135,7 @@ curl -X GET "http://localhost:8000/insights/document-stats?category=Policy" \
 ## API Examples
 
 ### Dashboard Summary Response
+
 ```json
 {
   "total_documents": 150,
@@ -139,20 +144,22 @@ curl -X GET "http://localhost:8000/insights/document-stats?category=Policy" \
   "recent_uploads_7d": 12,
   "recent_searches_7d": 85,
   "top_categories": [
-    {"category": "Policy", "count": 45},
-    {"category": "Report", "count": 30}
+    { "category": "Policy", "count": 45 },
+    { "category": "Report", "count": 30 }
   ],
-  "user_role": "moe_admin"
+  "user_role": "ministry_admin"
 }
 ```
 
 ### Document Stats with Filters
+
 ```bash
 # Filter by category and date
 GET /insights/document-stats?category=Policy&date_from=2024-01-01&date_to=2024-12-31
 ```
 
 ### Trending Topics
+
 ```bash
 # Top 10 topics from last 7 days
 GET /insights/trending-topics?limit=10&days=7
@@ -165,16 +172,19 @@ GET /insights/trending-topics?limit=10&days=7
 ```javascript
 // Fetch dashboard data
 const fetchDashboard = async () => {
-  const token = localStorage.getItem('token');
-  const response = await fetch('http://localhost:8000/insights/dashboard-summary', {
-    headers: { 'Authorization': `Bearer ${token}` }
-  });
+  const token = localStorage.getItem("token");
+  const response = await fetch(
+    "http://localhost:8000/insights/dashboard-summary",
+    {
+      headers: { Authorization: `Bearer ${token}` },
+    }
+  );
   const data = await response.json();
-  
+
   // Display KPIs
   console.log(`Total Documents: ${data.total_documents}`);
   console.log(`Pending Approvals: ${data.pending_approvals}`);
-  
+
   // Render charts
   renderPieChart(data.top_categories);
 };
@@ -185,11 +195,13 @@ const fetchDashboard = async () => {
 ## Problem Statement Alignment
 
 ### ✅ Addresses:
+
 - "Draw insights from available authentic sources" - Trending topics, statistics
 - "Quick and accurate decision making" - Dashboard summary API
 - "Analyze data from multiple sources" - Cross-institution analysis
 
 ### ⚠️ Still Needed:
+
 - AI-generated insights (LLM-based)
 - Policy comparison tool
 - Decision support features
@@ -200,9 +212,11 @@ const fetchDashboard = async () => {
 ## Next Steps
 
 ### Complete Phase 1 (→ 7.5/10):
+
 - Task 1.3: Analytics Heatmap (Frontend, 2h)
 
 ### Phase 2 (→ 8.5/10):
+
 1. Policy Comparison Tool (8h)
 2. AI-Generated Insights (8h)
 3. Compliance Checker (6h)

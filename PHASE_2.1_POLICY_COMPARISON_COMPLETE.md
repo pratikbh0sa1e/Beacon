@@ -34,11 +34,13 @@
 **Class: PolicyComparisonTool**
 
 **Methods:**
+
 - `compare_policies(documents, aspects)` - Full structured comparison
 - `quick_compare(documents, focus_area)` - Quick focused comparison
 - `find_conflicts(documents)` - Detect policy conflicts
 
 **Features:**
+
 - Uses Gemini 2.0 Flash LLM
 - Extracts: objectives, scope, beneficiaries, budget, timeline, key provisions, implementation strategy
 - Returns structured JSON comparison matrix
@@ -46,6 +48,7 @@
 - Provides recommendations
 
 **Limits:**
+
 - Minimum: 2 documents
 - Maximum: 5 documents per comparison
 - Text limit: 3000 chars per document (to avoid token limits)
@@ -55,6 +58,7 @@
 #### Endpoint 1: `POST /documents/compare`
 
 **Request:**
+
 ```json
 {
   "document_ids": [1, 2, 3],
@@ -63,6 +67,7 @@
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
@@ -94,6 +99,7 @@
 ```
 
 **Role-Based Filtering:**
+
 - Validates access to each document
 - Returns 403 if user lacks access to any document
 - Logs comparison in audit trail
@@ -101,6 +107,7 @@
 #### Endpoint 2: `POST /documents/compare/conflicts`
 
 **Request:**
+
 ```json
 {
   "document_ids": [1, 2]
@@ -108,12 +115,13 @@
 ```
 
 **Response:**
+
 ```json
 {
   "status": "success",
   "documents": [
-    {"id": 1, "title": "Policy A"},
-    {"id": 2, "title": "Policy B"}
+    { "id": 1, "title": "Policy A" },
+    { "id": 2, "title": "Policy B" }
   ],
   "conflicts": [
     {
@@ -134,6 +142,7 @@
 ## Files Created
 
 1. **`Agent/tools/comparison_tools.py`** (400+ lines)
+
    - PolicyComparisonTool class
    - LLM-based comparison logic
    - Conflict detection
@@ -159,6 +168,7 @@
 ## How It Works
 
 ### Step 1: User Requests Comparison
+
 ```bash
 curl -X POST "http://localhost:8000/documents/compare" \
   -H "Authorization: Bearer YOUR_TOKEN" \
@@ -170,38 +180,42 @@ curl -X POST "http://localhost:8000/documents/compare" \
 ```
 
 ### Step 2: Role-Based Access Check (Respects Institutional Autonomy)
+
 ```python
 # For each document:
 if user.role == "developer":
     has_access = True  # Full access
-elif user.role == "moe_admin":
+elif user.role == "ministry_admin":
     # LIMITED access - respects institutional autonomy
     has_access = (doc.visibility == "public" or
                   doc.approval_status == "pending" or
                   doc.institution_id == user.institution_id or
                   doc.uploader_id == user.id)
 elif user.role == "university_admin":
-    has_access = (doc.visibility == "public" or 
+    has_access = (doc.visibility == "public" or
                   doc.institution_id == user.institution_id)
 elif user.role == "student":
-    has_access = (doc.approval_status == "approved" and 
+    has_access = (doc.approval_status == "approved" and
                   (doc.visibility == "public" or
                    (doc.visibility == "institution_only" and
                     doc.institution_id == user.institution_id)))
 ```
 
 ### Step 3: Fetch Document Data
+
 - Retrieves document text
 - Fetches metadata (title, summary, department)
 - Limits text to 3000 chars per document
 
 ### Step 4: LLM Comparison
+
 - Sends documents to Gemini 2.0 Flash
 - Extracts structured information
 - Identifies similarities and differences
 - Generates recommendations
 
 ### Step 5: Return Results
+
 - Structured JSON response
 - Comparison matrix
 - Summary with insights
@@ -247,19 +261,20 @@ python tests/test_comparison_api.py
 ## Use Cases
 
 ### 1. Policy Analysis
+
 **Scenario:** MoE admin needs to compare 3 education policies
 
 ```javascript
-const response = await fetch('/documents/compare', {
-  method: 'POST',
+const response = await fetch("/documents/compare", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
     document_ids: [1, 2, 3],
-    comparison_aspects: ['objectives', 'budget', 'timeline']
-  })
+    comparison_aspects: ["objectives", "budget", "timeline"],
+  }),
 });
 
 const data = await response.json();
@@ -267,18 +282,19 @@ const data = await response.json();
 ```
 
 ### 2. Conflict Detection
+
 **Scenario:** University admin checks for conflicts between institutional policies
 
 ```javascript
-const response = await fetch('/documents/compare/conflicts', {
-  method: 'POST',
+const response = await fetch("/documents/compare/conflicts", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${token}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
-    document_ids: [5, 6]
-  })
+    document_ids: [5, 6],
+  }),
 });
 
 const data = await response.json();
@@ -286,20 +302,21 @@ const data = await response.json();
 ```
 
 ### 3. Quick Comparison
+
 **Scenario:** Student compares two public guidelines
 
 ```javascript
 // Student can only compare approved public documents
-const response = await fetch('/documents/compare', {
-  method: 'POST',
+const response = await fetch("/documents/compare", {
+  method: "POST",
   headers: {
-    'Authorization': `Bearer ${studentToken}`,
-    'Content-Type': 'application/json'
+    Authorization: `Bearer ${studentToken}`,
+    "Content-Type": "application/json",
   },
   body: JSON.stringify({
     document_ids: [10, 11],
-    comparison_aspects: ['objectives']
-  })
+    comparison_aspects: ["objectives"],
+  }),
 });
 ```
 
@@ -308,11 +325,13 @@ const response = await fetch('/documents/compare', {
 ## Problem Statement Alignment
 
 ### ✅ Addresses:
+
 - **"Analyze data from multiple sources"** - Compares multiple policy documents
 - **"Quick and accurate decision making"** - Structured comparison helps decision-makers
 - **"Draw insights"** - LLM extracts key similarities, differences, recommendations
 
 ### Impact:
+
 This is a **CORE REQUIREMENT** from the problem statement. Officials need to compare policies to make informed decisions.
 
 ---
@@ -320,21 +339,25 @@ This is a **CORE REQUIREMENT** from the problem statement. Officials need to com
 ## Security Features
 
 ### 1. Role-Based Access
+
 - Every document validated before comparison
 - Users can't compare documents they don't have access to
 - Returns 403 Forbidden if access denied
 
 ### 2. Input Validation
+
 - Minimum 2 documents required
 - Maximum 5 documents allowed
 - Document IDs must exist in database
 
 ### 3. Audit Trail
+
 - All comparisons logged in audit_logs table
 - Tracks: user_id, document_ids, aspects, status
 - Enables compliance monitoring
 
 ### 4. Error Handling
+
 - Graceful handling of LLM failures
 - Returns partial results if JSON parsing fails
 - Detailed error messages for debugging
@@ -344,16 +367,19 @@ This is a **CORE REQUIREMENT** from the problem statement. Officials need to com
 ## Performance Considerations
 
 ### Token Limits
+
 - Text limited to 3000 chars per document
 - Prevents exceeding LLM token limits
 - Ensures fast response times
 
 ### Response Time
+
 - Typical: 5-10 seconds for 2-3 documents
 - Depends on: document length, LLM response time
 - Consider caching for frequently compared documents
 
 ### Optimization Tips
+
 - Use `comparison_aspects` to limit scope
 - Compare fewer documents for faster results
 - Cache comparison results for 1 hour
@@ -363,12 +389,14 @@ This is a **CORE REQUIREMENT** from the problem statement. Officials need to com
 ## Limitations & Future Enhancements
 
 ### Current Limitations:
+
 - Maximum 5 documents per comparison
 - Text truncated to 3000 chars per document
 - No visual diff highlighting
 - No export to PDF/Excel
 
 ### Future Enhancements:
+
 1. **Visual Comparison UI** - Side-by-side view with highlighting
 2. **Export Functionality** - PDF/Excel export of comparison
 3. **Comparison History** - Save and retrieve past comparisons
@@ -381,15 +409,18 @@ This is a **CORE REQUIREMENT** from the problem statement. Officials need to com
 ## API Documentation
 
 ### Interactive Docs
+
 Visit: http://localhost:8000/docs
 
 Look for:
+
 - `POST /documents/compare`
 - `POST /documents/compare/conflicts`
 
 ### Request Models
 
 **CompareRequest:**
+
 ```python
 {
   "document_ids": List[int],  # 2-5 document IDs
@@ -398,6 +429,7 @@ Look for:
 ```
 
 **Default Aspects:**
+
 - objectives
 - scope
 - beneficiaries
@@ -411,6 +443,7 @@ Look for:
 ## Error Responses
 
 ### 400 Bad Request
+
 ```json
 {
   "detail": "At least 2 documents required for comparison"
@@ -418,6 +451,7 @@ Look for:
 ```
 
 ### 403 Forbidden
+
 ```json
 {
   "detail": "You don't have access to document 5"
@@ -425,6 +459,7 @@ Look for:
 ```
 
 ### 404 Not Found
+
 ```json
 {
   "detail": "Document 10 not found"
@@ -432,6 +467,7 @@ Look for:
 ```
 
 ### 500 Internal Server Error
+
 ```json
 {
   "detail": "Comparison failed: [error message]"
@@ -443,12 +479,14 @@ Look for:
 ## Next Steps
 
 ### Complete Phase 2 (→ 8.5/10):
+
 1. ✅ Task 2.1: Policy Comparison (COMPLETE)
 2. ⏳ Task 2.2: Compliance Checker (6h)
 3. ⏳ Task 2.3: Conflict Detection Enhancement (6h)
 4. ⏳ Task 2.4: AI-Generated Insights (8h)
 
 ### Frontend Integration:
+
 1. Create CompareDocumentsPage component
 2. Add multi-select document picker
 3. Display comparison matrix in table
@@ -460,6 +498,7 @@ Look for:
 ## Summary
 
 **What Was Built:**
+
 - LLM-based policy comparison tool
 - 2 API endpoints with role-based access
 - Structured comparison matrix
@@ -467,6 +506,7 @@ Look for:
 - Comprehensive test suite
 
 **Key Features:**
+
 - ✅ 100% role-based access control
 - ✅ LLM-powered analysis (Gemini 2.0 Flash)
 - ✅ Structured JSON output
@@ -475,6 +515,7 @@ Look for:
 - ✅ Input validation
 
 **Impact:**
+
 - Addresses core problem statement requirement
 - Enables data-driven decision making
 - Helps identify policy conflicts

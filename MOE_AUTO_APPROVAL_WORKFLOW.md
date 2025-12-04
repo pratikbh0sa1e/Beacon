@@ -28,13 +28,13 @@ MoE Upload → Draft → Submit for Review → Pending → Approve (redundant!)
 
 ```python
 # MoE Admin and Developer don't need approval - their uploads are auto-approved
-initial_status = "approved" if current_user.role in ["moe_admin", "developer"] else "draft"
+initial_status = "approved" if current_user.role in ["ministry_admin", "developer"] else "draft"
 
 doc = Document(
     # ... other fields ...
     approval_status=initial_status,  # MoE/Developer: approved, Others: draft
-    approved_by=current_user.id if current_user.role in ["moe_admin", "developer"] else None,
-    approved_at=datetime.utcnow() if current_user.role in ["moe_admin", "developer"] else None
+    approved_by=current_user.id if current_user.role in ["ministry_admin", "developer"] else None,
+    approved_at=datetime.utcnow() if current_user.role in ["ministry_admin", "developer"] else None
 )
 ```
 
@@ -58,7 +58,7 @@ doc = Document(
   /* ✅ Submit for Review Button - Only for University users (NOT MoE) */
 }
 {
-  user?.role !== "moe_admin" &&
+  user?.role !== "ministry_admin" &&
     user?.role !== "developer" &&
     ((user?.role === "university_admin" &&
       user?.institution_id === docData.institution_id) ||
@@ -91,7 +91,7 @@ doc = Document(
   /* ✅ Publish Button for MoE Admin - Direct publish without approval */
 }
 {
-  (user?.role === "moe_admin" || user?.role === "developer") &&
+  (user?.role === "ministry_admin" || user?.role === "developer") &&
     docData.approval_status === "draft" && (
       <Button
         onClick={handlePublish}

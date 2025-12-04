@@ -139,7 +139,7 @@ Result: Document approved
 ```python
 # Backend changes:
 approval_status = "approved"
-approved_by = moe_admin.id
+approved_by = MINISTRY_ADMIN.id
 approved_at = datetime.utcnow()
 
 # Notifications sent:
@@ -222,7 +222,7 @@ Result: Document rejected
 # Backend changes:
 approval_status = "rejected"
 rejection_reason = "Reason: [MoE Admin's reason]"
-approved_by = moe_admin.id
+approved_by = MINISTRY_ADMIN.id
 approved_at = datetime.utcnow()
 
 # Notifications sent:
@@ -392,7 +392,7 @@ Message: "Your document 'University A Annual Report' has been rejected. Reason: 
   path="approvals"
   element={
     <ProtectedRoute
-      allowedRoles={["developer", "moe_admin", "university_admin"]}
+      allowedRoles={["developer", "ministry_admin", "university_admin"]}
     >
       <ApprovalsPage />
     </ProtectedRoute>

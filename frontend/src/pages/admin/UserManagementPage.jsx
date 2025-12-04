@@ -10,7 +10,8 @@ import {
   MoreVertical,
 } from "lucide-react";
 import { userAPI } from "../../services/api";
-import { ALL_ROLES } from "../../constants/roles";
+import { MANAGEABLE_ROLES, ROLE_DISPLAY_NAMES } from "../../constants/roles";
+import { useAuthStore } from "../../stores/authStore";
 import { PageHeader } from "../../components/common/PageHeader";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import { Button } from "../../components/ui/button";
@@ -52,6 +53,7 @@ import { formatDateTime } from "../../utils/dateFormat";
 import { toast } from "sonner";
 
 export const UserManagementPage = () => {
+  const { user: currentUser } = useAuthStore();
   const [users, setUsers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [actionDialog, setActionDialog] = useState({
@@ -59,6 +61,62 @@ export const UserManagementPage = () => {
     user: null,
     action: null,
   });
+
+  // Determine which roles the current user can assign
+  const getAssignableRoles = (targetUser) => {
+    if (currentUser.role === "developer") {
+      // Developer can assign any manageable role
+      return MANAGEABLE_ROLES;
+    } else if (currentUser.role === "ministry_admin") {
+      // Ministry Admin can assign roles EXCEPT ministry_admin
+      // They cannot promote users to their own level
+      return MANAGEABLE_ROLES.filter((role) => role !== "ministry_admin");
+    } else if (currentUser.role === "university_admin") {
+      // University Admin can only assign Document Officer and Student
+      // And only for users in their institution
+      if (targetUser.institution_id === currentUser.institution_id) {
+        return ["document_officer", "student"];
+      }
+      return []; // Cannot change roles for users from other institutions
+    }
+    return []; // Other roles cannot change roles
+  };
+
+  // Check if current user can change a specific user's role
+  const canChangeRole = (targetUser) => {
+    if (targetUser.role === "developer") return false; // Developer is protected
+    if (currentUser.role === "developer") return true;
+    if (currentUser.role === "ministry_admin") {
+      // Ministry Admin cannot change other Ministry Admin roles
+      return targetUser.role !== "ministry_admin";
+    }
+    if (currentUser.role === "university_admin") {
+      // Can only change roles for users in same institution
+      return (
+        targetUser.institution_id === currentUser.institution_id &&
+        ["document_officer", "student"].includes(targetUser.role)
+      );
+    }
+    return false;
+  };
+
+  // Check if current user can perform actions on target user
+  const canManageUser = (targetUser) => {
+    if (targetUser.role === "developer") return false; // Developer is protected
+    if (currentUser.role === "developer") return true;
+    if (currentUser.role === "ministry_admin") {
+      // Ministry Admin can manage University Admins and below
+      return !["developer", "ministry_admin"].includes(targetUser.role);
+    }
+    if (currentUser.role === "university_admin") {
+      // University Admin can only manage users in same institution
+      return (
+        targetUser.institution_id === currentUser.institution_id &&
+        ["document_officer", "student"].includes(targetUser.role)
+      );
+    }
+    return false;
+  };
 
   useEffect(() => {
     fetchUsers();
@@ -84,7 +142,8 @@ export const UserManagementPage = () => {
       fetchUsers();
     } catch (error) {
       console.error("Approve error:", error);
-      toast.error("Failed to approve user");
+      const errorMsg = error.response?.data?.detail || "Failed to approve user";
+      toast.error(errorMsg);
     }
     setActionDialog({ open: false, user: null, action: null });
   };
@@ -140,6 +199,14 @@ export const UserManagementPage = () => {
     return <LoadingSpinner text="Loading users..." />;
   }
 
+  // Filter out developer accounts for non-developers
+  const visibleUsers = users.filter((user) => {
+    if (user.role === "developer" && currentUser.role !== "developer") {
+      return false;
+    }
+    return true;
+  });
+
   return (
     <div className="space-y-6">
       <PageHeader
@@ -152,14 +219,14 @@ export const UserManagementPage = () => {
         <Card className="glass-card border-border/50">
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Total Users</p>
-            <p className="text-3xl font-bold mt-2">{users.length}</p>
+            <p className="text-3xl font-bold mt-2">{visibleUsers.length}</p>
           </CardContent>
         </Card>
         <Card className="glass-card border-border/50">
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Pending Approval</p>
             <p className="text-3xl font-bold mt-2 text-warning">
-              {users.filter((u) => !u.approved).length}
+              {visibleUsers.filter((u) => !u.approved).length}
             </p>
           </CardContent>
         </Card>
@@ -167,7 +234,7 @@ export const UserManagementPage = () => {
           <CardContent className="p-6">
             <p className="text-sm text-muted-foreground">Active Users</p>
             <p className="text-3xl font-bold mt-2 text-success">
-              {users.filter((u) => u.approved).length}
+              {visibleUsers.filter((u) => u.approved).length}
             </p>
           </CardContent>
         </Card>
@@ -188,7 +255,7 @@ export const UserManagementPage = () => {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {users.map((user, index) => (
+                {visibleUsers.map((user, index) => (
                   <motion.tr
                     key={user.id}
                     initial={{ opacity: 0, y: 20 }}
@@ -198,23 +265,33 @@ export const UserManagementPage = () => {
                   >
                     <TableCell className="font-medium">{user.email}</TableCell>
                     <TableCell>
-                      <Select
-                        value={user.role}
-                        onValueChange={(value) =>
-                          handleRoleChange(user.id, value)
-                        }
-                      >
-                        <SelectTrigger className="w-40">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {ALL_ROLES.map((role) => (
-                            <SelectItem key={role} value={role}>
-                              {role}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      {user.role === "developer" ? (
+                        <Badge variant="secondary" className="font-semibold">
+                          Developer (Protected)
+                        </Badge>
+                      ) : canChangeRole(user) ? (
+                        <Select
+                          value={user.role}
+                          onValueChange={(value) =>
+                            handleRoleChange(user.id, value)
+                          }
+                        >
+                          <SelectTrigger className="w-48">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {getAssignableRoles(user).map((role) => (
+                              <SelectItem key={role} value={role}>
+                                {ROLE_DISPLAY_NAMES[role]}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      ) : (
+                        <Badge variant="outline">
+                          {ROLE_DISPLAY_NAMES[user.role]}
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell>
                       {user.institution?.name || (
@@ -231,7 +308,13 @@ export const UserManagementPage = () => {
                     </TableCell>
                     <TableCell className="text-right">
                       <div className="flex justify-end gap-2">
-                        {!user.approved ? (
+                        {!canManageUser(user) ? (
+                          <Badge variant="outline" className="text-xs">
+                            {user.role === "developer"
+                              ? "Protected"
+                              : "No Access"}
+                          </Badge>
+                        ) : !user.approved ? (
                           <>
                             <Button
                               size="sm"

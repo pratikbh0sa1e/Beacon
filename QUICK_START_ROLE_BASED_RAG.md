@@ -3,6 +3,7 @@
 ## What Was Fixed
 
 Your RAG system now:
+
 1. ✅ **Works across multiple machines** - Embeddings stored in PostgreSQL (pgvector), not local files
 2. ✅ **Enforces role-based access** - MoE admins see all MoE docs, university admins see their institution's docs
 3. ✅ **Uses S3 for files** - Fetches documents from Supabase S3 instead of local storage
@@ -37,24 +38,26 @@ That's it! The system is now ready.
 ## How It Works Now
 
 ### Before (Broken)
+
 - User uploads doc on PC1 → Stored locally on PC1
 - User logs in on PC2 → Can't access doc (not on PC2)
 - RAG searches ALL documents regardless of user role ❌
 
 ### After (Fixed)
+
 - User uploads doc → Stored in Supabase S3 + PostgreSQL
 - User logs in on PC2 → Can access doc (from cloud)
 - RAG only searches documents user has permission to see ✅
 
 ## Role-Based Access Rules
 
-| Role | Can See |
-|------|---------|
-| **Developer** | All documents |
-| **MoE Admin** | Public + Restricted + All institution_only docs |
-| **University Admin** | Public + Their institution's docs |
-| **Student** | Public + Their institution's institution_only docs |
-| **Public Viewer** | Public docs only |
+| Role                 | Can See                                            |
+| -------------------- | -------------------------------------------------- |
+| **Developer**        | All documents                                      |
+| **MoE Admin**        | Public + Restricted + All institution_only docs    |
+| **University Admin** | Public + Their institution's docs                  |
+| **Student**          | Public + Their institution's institution_only docs |
+| **Public Viewer**    | Public docs only                                   |
 
 ## Testing
 
@@ -73,7 +76,7 @@ curl -X POST http://localhost:8000/api/documents/upload \
 ```bash
 # Query as MoE Admin (should see all docs)
 curl -X POST http://localhost:8000/api/chat/query \
-  -H "Authorization: Bearer <moe_admin_token>" \
+  -H "Authorization: Bearer <MINISTRY_ADMIN_token>" \
   -H "Content-Type: application/json" \
   -d '{"question": "What are the policies?"}'
 
@@ -94,7 +97,7 @@ Citations now include approval status:
     {
       "document_id": 1,
       "title": "Education Policy 2024",
-      "approval_status": "pending",  // ← Shows in frontend
+      "approval_status": "pending", // ← Shows in frontend
       "visibility_level": "public",
       "text": "..."
     }
@@ -123,11 +126,13 @@ python scripts/batch_embed_documents.py 1 2 3 4 5
 Install pgvector in PostgreSQL:
 
 **Ubuntu/Debian:**
+
 ```bash
 sudo apt install postgresql-15-pgvector
 ```
 
 **macOS:**
+
 ```bash
 brew install pgvector
 ```
@@ -138,12 +143,14 @@ Follow: https://github.com/pgvector/pgvector#installation
 ### "No results found"
 
 Documents need to be embedded first. Either:
+
 1. Wait for automatic embedding on first query (lazy embedding)
 2. Run batch embedding: `python scripts/batch_embed_documents.py`
 
 ### "Access denied"
 
 Check:
+
 1. User has correct role in database
 2. Document has correct `visibility_level`
 3. User's `institution_id` matches document's (for institution_only docs)
@@ -151,6 +158,7 @@ Check:
 ## What Changed in Code
 
 ### Files Modified:
+
 - `backend/database.py` - Added `DocumentEmbedding` table
 - `Agent/vector_store/pgvector_store.py` - New pgvector implementation
 - `Agent/tools/lazy_search_tools.py` - Role-based filtering
@@ -159,6 +167,7 @@ Check:
 - `Agent/lazy_rag/lazy_embedder.py` - Use pgvector + S3
 
 ### Files Created:
+
 - `scripts/enable_pgvector.py` - Database setup
 - `scripts/batch_embed_documents.py` - Batch embedding
 - `ROLE_BASED_RAG_IMPLEMENTATION.md` - Full documentation

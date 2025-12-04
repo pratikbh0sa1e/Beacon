@@ -33,11 +33,11 @@ async def list_domains(
     Get list of all configured institution domains
     Only accessible by developers and MoE admins
     """
-    if current_user.role not in ["developer", "moe_admin"]:
+    if current_user.role not in ["developer", "ministry_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     return {
-        "moe_admin": INSTITUTION_DOMAINS.get("moe_admin", []),
+        "ministry_admin": INSTITUTION_DOMAINS.get("ministry_admin", []),
         "university_admin": INSTITUTION_DOMAINS.get("university_admin", [])
     }
 
@@ -52,7 +52,7 @@ async def add_domain(
     Add a domain to institution whitelist
     Only accessible by developers and MoE admins
     """
-    if current_user.role not in ["developer", "moe_admin"]:
+    if current_user.role not in ["developer", "ministry_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Verify institution exists
@@ -62,7 +62,7 @@ async def add_domain(
     
     # Determine role based on institution type
     if institution.type == "ministry":
-        role = "moe_admin"
+        role = "ministry_admin"
     elif institution.type in ["university", "college"]:
         role = "university_admin"
     else:
@@ -89,7 +89,7 @@ async def get_institution_domains(
     """
     Get domains for a specific institution
     """
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     institution = db.query(Institution).filter(Institution.id == institution_id).first()
@@ -98,7 +98,7 @@ async def get_institution_domains(
     
     # Determine role
     if institution.type == "ministry":
-        role = "moe_admin"
+        role = "ministry_admin"
     elif institution.type in ["university", "college"]:
         role = "university_admin"
     else:
@@ -138,7 +138,7 @@ async def bulk_add_domains(
                 continue
             
             if institution.type == "ministry":
-                role = "moe_admin"
+                role = "ministry_admin"
             elif institution.type in ["university", "college"]:
                 role = "university_admin"
             else:

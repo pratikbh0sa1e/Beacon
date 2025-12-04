@@ -61,10 +61,11 @@ export const authAPI = {
 export const userAPI = {
   listUsers: (params) => api.get("/users/list", { params }),
   getPendingUsers: () => api.get("/users/pending"),
-  approveUser: (userId, notes) =>
+  approveUser: (userId, notes = null) =>
     api.post(`/users/approve/${userId}`, { notes }),
-  rejectUser: (userId, notes) => api.post(`/users/reject/${userId}`, { notes }),
-  revokeApproval: (userId, notes) =>
+  rejectUser: (userId, notes = null) =>
+    api.post(`/users/reject/${userId}`, { notes }),
+  revokeApproval: (userId, notes = null) =>
     api.post(`/users/revoke/${userId}`, { notes }),
   deleteUser: (userId) => api.delete(`/users/delete/${userId}`),
   changeRole: (userId, newRole, notes) =>
@@ -73,8 +74,11 @@ export const userAPI = {
 
 // ============ INSTITUTION ENDPOINTS ============
 export const institutionAPI = {
-  list: (type) => api.get("/institutions/list", { params: { type } }),
+  list: (type) => api.get("/institutions/list", { params: { type } }), // Authenticated - filtered by role
+  listPublic: (type) => api.get("/institutions/public", { params: { type } }), // Public - for registration
   create: (data) => api.post("/institutions/create", data),
+  delete: (institutionId, data) =>
+    api.delete(`/institutions/${institutionId}`, { data }),
   assignUser: (userId, institutionId) =>
     api.patch(`/institutions/assign-user/${userId}`, {
       institution_id: institutionId,
@@ -216,3 +220,24 @@ export const systemAPI = {
 };
 
 export default api;
+
+// ============ NOTES ENDPOINTS ============
+export const notesAPI = {
+  // Create a new note
+  create: (noteData) => api.post("/api/notes/", noteData),
+
+  // Get all notes (optionally filtered by document_id or search)
+  list: (params) => api.get("/api/notes/", { params }),
+
+  // Get a specific note
+  get: (noteId) => api.get(`/api/notes/${noteId}`),
+
+  // Update a note
+  update: (noteId, noteData) => api.put(`/api/notes/${noteId}`, noteData),
+
+  // Delete a note
+  delete: (noteId) => api.delete(`/api/notes/${noteId}`),
+
+  // Get notes statistics
+  stats: () => api.get("/api/notes/stats/summary"),
+};

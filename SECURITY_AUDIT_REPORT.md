@@ -29,7 +29,7 @@ I've audited all backend routes for proper role-based access control. Here's wha
 **Access Control**:
 
 ```python
-if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 ```
 
@@ -73,7 +73,7 @@ if current_user.role not in ["developer", "moe_admin", "university_admin"]:
 **Access Control**:
 
 ```python
-if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
     raise HTTPException(status_code=403, detail="Insufficient permissions")
 ```
 
@@ -291,7 +291,7 @@ async def embed_documents(
     current_user: User = Depends(get_current_user)  # ADD THIS
 ):
     # Add role check
-    if current_user.role not in ["developer", "moe_admin"]:
+    if current_user.role not in ["developer", "ministry_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     # Existing code...
 ```
@@ -304,7 +304,7 @@ async def get_vector_stats(
     current_user: User = Depends(get_current_user)  # ADD THIS
 ):
     # Add role check
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Admin access only")
     # Existing code...
 ```

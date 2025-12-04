@@ -43,7 +43,7 @@ def check_admin_permission(current_user: User, target_user: User) -> bool:
         return True
     
     # MoE admin can manage university admins
-    if current_user.role == "moe_admin" and target_user.role == "university_admin":
+    if current_user.role == "ministry_admin" and target_user.role == "university_admin":
         return True
     
     # University admin can manage doc officers and students in their institution
@@ -85,7 +85,7 @@ async def list_users(
     - Others cannot list users
     """
     # Check permissions
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Build query
@@ -96,7 +96,7 @@ async def list_users(
         query = query.filter(User.role != "developer")
     
     # Apply hierarchy-based filtering
-    if current_user.role == "moe_admin":
+    if current_user.role == "ministry_admin":
         # MoE admins see university admins, doc officers, and students
         query = query.filter(User.role.in_(["university_admin", "document_officer", "student"]))
     elif current_user.role == "university_admin":
@@ -109,7 +109,7 @@ async def list_users(
         query = query.filter(User.role == role)
     if approved is not None:
         query = query.filter(User.approved == approved)
-    if institution_id and current_user.role in ["developer", "moe_admin"]:
+    if institution_id and current_user.role in ["developer", "ministry_admin"]:
         query = query.filter(User.institution_id == institution_id)
     
     users = query.order_by(User.created_at.desc()).all()
@@ -147,17 +147,17 @@ async def approve_user(
         )
     
     # ✅ ADD THIS BLOCK: Limit Ministry Admins to 5
-    if target_user.role == "moe_admin":
-        MAX_MOE_ADMINS = 5
+    if target_user.role == "ministry_admin":
+        MAX_MINISTRY_ADMINS = 5
         current_count = db.query(User).filter(
-            User.role == "moe_admin", 
+            User.role == "ministry_admin", 
             User.approved == True
         ).count()
         
-        if current_count >= MAX_MOE_ADMINS:
+        if current_count >= MAX_MINISTRY_ADMINS:
             raise HTTPException(
                 status_code=400, 
-                detail=f"Limit reached: You cannot have more than {MAX_MOE_ADMINS} Active Ministry Admins."
+                detail=f"Limit reached: You cannot have more than {MAX_MINISTRY_ADMINS} Active Ministry Admins."
             )
         
     if target_user.role == "university_admin":
@@ -262,7 +262,7 @@ async def change_user_role(
         raise HTTPException(status_code=400, detail="Cannot change your own role")
     
     # Validate new role
-    valid_roles = ["student", "document_officer", "university_admin", "moe_admin", "developer"]
+    valid_roles = ["student", "document_officer", "university_admin", "ministry_admin", "developer"]
     if request.new_role not in valid_roles:
         raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {valid_roles}")
     
@@ -411,7 +411,7 @@ async def get_pending_users(
     db: Session = Depends(get_db)
 ):
     """Get list of users pending approval based on current user's role"""
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     query = db.query(User).filter(User.approved == False)
@@ -419,8 +419,8 @@ async def get_pending_users(
     # Filter based on role
     if current_user.role == "developer":
         # Developers see MoE admin requests
-        query = query.filter(User.role == "moe_admin")
-    elif current_user.role == "moe_admin":
+        query = query.filter(User.role == "ministry_admin")
+    elif current_user.role == "ministry_admin":
         # MoE admins see university admin requests
         query = query.filter(User.role == "university_admin")
     elif current_user.role == "university_admin":

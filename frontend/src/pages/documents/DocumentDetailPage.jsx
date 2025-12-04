@@ -13,6 +13,7 @@ import {
   AlertCircle,
   CheckCircle,
   MessageSquare,
+  StickyNote,
 } from "lucide-react";
 import { documentAPI, bookmarkAPI } from "../../services/api";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
@@ -29,8 +30,14 @@ import { formatDateTime } from "../../utils/dateFormat";
 import { toast } from "sonner";
 import { useAuthStore } from "../../stores/authStore";
 import { SecureDocumentViewer } from "../../components/documents/SecureDocumentViewer";
+import { DocumentNotes } from "../../components/notes/DocumentNotes";
 import { DocumentChatPanel } from "../../components/documents/DocumentChatPanel";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "../../components/ui/tabs";
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from "../../components/ui/tabs";
 
 export const DocumentDetailPage = () => {
   const { id } = useParams();
@@ -120,7 +127,7 @@ export const DocumentDetailPage = () => {
     try {
       await documentAPI.submitForReview(id);
       toast.success(
-        "Document submitted for MoE review successfully! MoE administrators have been notified."
+        "Document submitted for ministry review successfully! Ministry administrators have been notified."
       );
       fetchDocument(); // Refresh to show updated status
     } catch (error) {
@@ -182,12 +189,12 @@ export const DocumentDetailPage = () => {
                 docData.approval_status === "approved"
                   ? "bg-green-600"
                   : docData.approval_status === "pending"
-                    ? "bg-yellow-600"
-                    : docData.approval_status === "rejected"
-                      ? "bg-red-600"
-                      : docData.approval_status === "draft"
-                        ? "bg-gray-600"
-                        : "bg-blue-600"
+                  ? "bg-yellow-600"
+                  : docData.approval_status === "rejected"
+                  ? "bg-red-600"
+                  : docData.approval_status === "draft"
+                  ? "bg-gray-600"
+                  : "bg-blue-600"
               }
             >
               {docData.approval_status?.replace("_", " ").toUpperCase()}
@@ -209,8 +216,8 @@ export const DocumentDetailPage = () => {
           <Star className={`h-5 w-5 ${isBookmarked ? "fill-current" : ""}`} />
         </Button>
 
-        {/* ✅ Publish Button for MoE Admin - Direct publish without approval */}
-        {(user?.role === "moe_admin" || user?.role === "developer") &&
+        {/* ✅ Publish Button for Ministry Admin - Direct publish without approval */}
+        {(user?.role === "ministry_admin" || user?.role === "developer") &&
           docData.approval_status === "draft" && (
             <Button
               onClick={handlePublish}
@@ -222,9 +229,9 @@ export const DocumentDetailPage = () => {
             </Button>
           )}
 
-        {/* ✅ Submit for Review Button - Only for University users (NOT MoE) */}
-        {/* MoE Admin and Developer don't need approval - their uploads are auto-approved */}
-        {user?.role !== "moe_admin" &&
+        {/* ✅ Submit/Resubmit for Review Button - Only for University users (NOT Ministry) */}
+        {/* Ministry Admin and Developer don't need approval - their uploads are auto-approved */}
+        {user?.role !== "ministry_admin" &&
           user?.role !== "developer" &&
           ((user?.role === "university_admin" &&
             user?.institution_id === docData.institution_id) ||
@@ -235,10 +242,20 @@ export const DocumentDetailPage = () => {
             <Button
               onClick={handleSubmitForReview}
               disabled={submitting}
-              className="bg-blue-600 hover:bg-blue-700"
+              className={
+                docData.approval_status === "rejected" ||
+                docData.approval_status === "changes_requested"
+                  ? "bg-orange-600 hover:bg-orange-700"
+                  : "bg-blue-600 hover:bg-blue-700"
+              }
             >
               <Send className="h-4 w-4 mr-2" />
-              {submitting ? "Submitting..." : "Submit for MoE Review"}
+              {submitting
+                ? "Submitting..."
+                : docData.approval_status === "rejected" ||
+                  docData.approval_status === "changes_requested"
+                ? "Resubmit for Ministry Review"
+                : "Submit for Ministry Review"}
             </Button>
           )}
 
@@ -387,14 +404,21 @@ export const DocumentDetailPage = () => {
         <CardContent className="p-0">
           <Tabs defaultValue="preview" className="w-full">
             <div className="border-b border-border/50 px-6 pt-6">
-              <TabsList className="grid w-full max-w-md grid-cols-2">
-                <TabsTrigger value="preview" className="flex items-center gap-2">
+              <TabsList className="grid w-full max-w-2xl grid-cols-3">
+                <TabsTrigger
+                  value="preview"
+                  className="flex items-center gap-2"
+                >
                   <Eye className="h-4 w-4" />
                   Preview
                 </TabsTrigger>
                 <TabsTrigger value="chat" className="flex items-center gap-2">
                   <MessageSquare className="h-4 w-4" />
                   Discussion
+                </TabsTrigger>
+                <TabsTrigger value="notes" className="flex items-center gap-2">
+                  <StickyNote className="h-4 w-4" />
+                  My Notes
                 </TabsTrigger>
               </TabsList>
             </div>
@@ -427,10 +451,10 @@ export const DocumentDetailPage = () => {
                       Preview Disabled for Protected Documents
                     </p>
                     <p className="text-sm text-muted-foreground">
-                      This document has been marked as protected by the uploader.
-                      Preview is disabled to prevent unauthorized access. If you
-                      need access, please contact the document owner or your
-                      administrator.
+                      This document has been marked as protected by the
+                      uploader. Preview is disabled to prevent unauthorized
+                      access. If you need access, please contact the document
+                      owner or your administrator.
                     </p>
                   </div>
                 </div>
@@ -457,6 +481,10 @@ export const DocumentDetailPage = () => {
 
             <TabsContent value="chat" className="p-6 m-0">
               <DocumentChatPanel documentId={id} />
+            </TabsContent>
+
+            <TabsContent value="notes" className="p-6 m-0">
+              <DocumentNotes documentId={id} />
             </TabsContent>
           </Tabs>
         </CardContent>

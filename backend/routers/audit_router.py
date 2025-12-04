@@ -29,7 +29,7 @@ async def get_audit_logs(
     - Others cannot access audit logs
     """
     # Check permissions
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions to view audit logs")
     
     # Calculate date threshold
@@ -104,7 +104,7 @@ async def get_action_types(
     db: Session = Depends(get_db)
 ):
     """Get list of all action types in the system"""
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Get distinct action types
@@ -151,7 +151,7 @@ async def get_user_activity(
         if current_user.role == "university_admin":
             if target_user.institution_id != current_user.institution_id:
                 raise HTTPException(status_code=403, detail="Can only view activity for users in your institution")
-        elif current_user.role not in ["developer", "moe_admin"]:
+        elif current_user.role not in ["developer", "ministry_admin"]:
             raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Calculate date threshold
@@ -193,7 +193,7 @@ async def get_audit_summary(
     
     - Only available to admins
     """
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Calculate date threshold

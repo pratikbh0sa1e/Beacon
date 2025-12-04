@@ -28,14 +28,14 @@ def can_approve_document(user: User, document: Document) -> bool:
         return True
     
     if document.visibility_level == "public":
-        return user.role in ["university_admin", "moe_admin"]
+        return user.role in ["university_admin", "ministry_admin"]
     
     if document.visibility_level == "institution_only":
         return (user.role == "university_admin" and 
                 user.institution_id == document.institution_id)
     
     if document.visibility_level == "restricted":
-        return user.role in ["moe_admin", "developer"]
+        return user.role in ["ministry_admin", "developer"]
     
     if document.visibility_level == "confidential":
         return user.role == "developer"
@@ -55,7 +55,7 @@ async def get_pending_documents(
     - MoE Admin sees restricted and public documents
     - University Admin sees institution-only and public documents from their institution
     """
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Base query for pending documents
@@ -65,7 +65,7 @@ async def get_pending_documents(
     if current_user.role == "developer":
         # Developers see all pending documents
         pass
-    elif current_user.role == "moe_admin":
+    elif current_user.role == "ministry_admin":
         # MoE admins see restricted and public documents
         query = query.filter(Document.visibility_level.in_(["restricted", "public"]))
     elif current_user.role == "university_admin":
@@ -110,7 +110,7 @@ async def get_approved_documents(
     - MoE Admin sees restricted and public approved documents
     - University Admin sees institution-only and public approved documents from their institution
     """
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Base query for approved documents
@@ -120,7 +120,7 @@ async def get_approved_documents(
     if current_user.role == "developer":
         # Developers see all approved documents
         pass
-    elif current_user.role == "moe_admin":
+    elif current_user.role == "ministry_admin":
         # MoE admins see restricted and public documents
         query = query.filter(Document.visibility_level.in_(["restricted", "public"]))
     elif current_user.role == "university_admin":
@@ -172,7 +172,7 @@ async def get_rejected_documents(
     - MoE Admin sees restricted and public rejected documents
     - University Admin sees institution-only and public rejected documents from their institution
     """
-    if current_user.role not in ["developer", "moe_admin", "university_admin"]:
+    if current_user.role not in ["developer", "ministry_admin", "university_admin"]:
         raise HTTPException(status_code=403, detail="Insufficient permissions")
     
     # Base query for rejected documents
@@ -182,7 +182,7 @@ async def get_rejected_documents(
     if current_user.role == "developer":
         # Developers see all rejected documents
         pass
-    elif current_user.role == "moe_admin":
+    elif current_user.role == "ministry_admin":
         # MoE admins see restricted and public documents
         query = query.filter(Document.visibility_level.in_(["restricted", "public"]))
     elif current_user.role == "university_admin":
