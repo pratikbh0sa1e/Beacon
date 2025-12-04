@@ -16,6 +16,7 @@ import {
   CheckCircle,
   StickyNote,
   Database,
+  HelpCircle,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -64,6 +65,7 @@ const menuItems = [
     path: "/admin/system",
     roles: ["developer"],
   },
+  { icon: HelpCircle, label: "Get Support", path: "/support", roles: [] },
 ];
 
 // Data Source menu items - role-based structure
@@ -200,9 +202,14 @@ export const Sidebar = ({ isOpen, onClose }) => {
               <p className="text-xs text-muted-foreground mb-3">
                 Contact support or check documentation
               </p>
-              <Button size="sm" variant="outline" className="w-full">
-                Get Support
-              </Button>
+              <Link
+                to="/support"
+                onClick={() => window.innerWidth < 1024 && onClose()}
+              >
+                <Button size="sm" variant="outline" className="w-full">
+                  Get Support
+                </Button>
+              </Link>
             </div>
           </div>
         </div>

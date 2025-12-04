@@ -55,6 +55,9 @@ import { NotesPage } from "./pages/NotesPage";
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
 
+// Support Page
+import { SupportPage } from "./pages/SupportPage";
+
 // Constants
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "./constants/roles";
 
@@ -189,6 +192,7 @@ const App = () => {
 
           <Route path="profile" element={<ProfilePage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="support" element={<SupportPage />} />
 
           <Route path="admin">
             <Route
