@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from Agent.data_ingestion.db_connector import ExternalDBConnector
 from Agent.data_ingestion.document_processor import ExternalDocumentProcessor
 from Agent.data_ingestion.models import ExternalDataSource, SyncLog
+from backend.database import Notification
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +49,13 @@ class SyncService:
         
         if not source.sync_enabled:
             return {"status": "skipped", "message": "Sync disabled for this source"}
+        
+        # Check if credentials exist (they may have been deleted on rejection/revocation)
+        if not source.password_encrypted:
+            return {
+                "status": "error", 
+                "message": "Credentials not available. Source may have been rejected or revoked."
+            }
         
         # Update status
         source.last_sync_status = "in_progress"
@@ -144,11 +152,15 @@ class SyncService:
             }
         
         except Exception as e:
-            logger.error(f"Sync failed for {source.name}: {str(e)}")
+            # Use error handler for better error messages
+            from backend.utils.error_handlers import handle_sync_error
+            error_info = handle_sync_error(e, source.name, "sync")
             
-            # Update source status
+            logger.error(f"Sync failed for {source.name}: {error_info['message']}")
+            
+            # Update source status with detailed error
             source.last_sync_status = "failed"
-            source.last_sync_message = str(e)
+            source.last_sync_message = error_info['message']
             
             # Create error log
             end_time = datetime.utcnow()
@@ -161,19 +173,50 @@ class SyncService:
                 documents_fetched=0,
                 documents_processed=0,
                 documents_failed=0,
-                error_message=str(e),
+                error_message=error_info['message'],
                 sync_duration_seconds=int(duration),
                 started_at=start_time,
                 completed_at=end_time
             )
             
             db.add(sync_log)
+            
+            # Send notification to requester about sync failure with detailed error
+            if source.requested_by_user_id:
+                # Create user-friendly notification message
+                notification_message = f"Synchronization failed for data source '{source.name}'.\n\n"
+                notification_message += f"Error: {error_info['message']}\n\n"
+                
+                if 'hint' in error_info.get('details', {}):
+                    notification_message += f"Suggestion: {error_info['details']['hint']}"
+                
+                notification = Notification(
+                    user_id=source.requested_by_user_id,
+                    type="data_source_sync_failed",
+                    title="Data Source Sync Failed",
+                    message=notification_message[:500],  # Limit message length
+                    priority="high",
+                    action_url=f"/admin/my-data-source-requests",
+                    action_label="View Details",
+                    action_metadata={
+                        "source_id": source.id,
+                        "source_name": source.name,
+                        "error_code": error_info.get('error_code', 'SYNC_ERROR'),
+                        "error_message": error_info['message'],
+                        "sync_log_id": sync_log.id,
+                        "details": error_info.get('details', {})
+                    }
+                )
+                db.add(notification)
+            
             db.commit()
             
             return {
                 "status": "failed",
                 "source_name": source.name,
-                "error": str(e)
+                "error": error_info['message'],
+                "error_code": error_info.get('error_code', 'SYNC_ERROR'),
+                "details": error_info.get('details', {})
             }
     
     def _process_supabase_documents(self,

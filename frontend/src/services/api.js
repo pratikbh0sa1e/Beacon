@@ -241,3 +241,48 @@ export const notesAPI = {
   // Get notes statistics
   stats: () => api.get("/api/notes/stats/summary"),
 };
+
+// ============ DATA SOURCE ENDPOINTS ============
+export const dataSourceAPI = {
+  // Request new data source connection
+  request: (data) => api.post("/data-sources/request", data),
+
+  // Get user's own requests
+  myRequests: () => api.get("/data-sources/my-requests"),
+
+  // Get pending requests (Developer only)
+  pendingRequests: () => api.get("/data-sources/requests/pending"),
+
+  // Approve request (Developer only)
+  approve: (id) => api.post(`/data-sources/requests/${id}/approve`),
+
+  // Reject request (Developer only)
+  reject: (id, reason) =>
+    api.post(`/data-sources/requests/${id}/reject`, {
+      rejection_reason: reason,
+    }),
+
+  // Test database connection
+  testConnection: (data) => api.post("/data-sources/test-connection", data),
+
+  // List all data sources (Developer only)
+  list: (params) => api.get("/data-sources/list", { params }),
+
+  // Get specific data source
+  get: (id) => api.get(`/data-sources/${id}`),
+
+  // Trigger manual sync
+  triggerSync: (id, params) =>
+    api.post(`/data-sources/${id}/sync`, null, { params }),
+
+  // Get sync logs
+  syncLogs: (id, limit = 10) =>
+    api.get(`/data-sources/${id}/sync-logs`, { params: { limit } }),
+
+  // Get active sources (Developer only)
+  activeSources: () => api.get("/data-sources/active"),
+
+  // Get all sync logs
+  allSyncLogs: (limit = 50) =>
+    api.get("/data-sources/sync-logs/all", { params: { limit } }),
+};

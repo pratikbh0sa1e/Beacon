@@ -212,7 +212,7 @@ class ExternalDataSource(Base):
     port = Column(Integer, nullable=False, default=5432)
     database_name = Column(String(100), nullable=False)
     username = Column(String(100), nullable=False)
-    password_encrypted = Column(Text, nullable=False)
+    password_encrypted = Column(Text, nullable=True)  # Nullable to allow credential deletion on rejection
     
     # Document retrieval config
     table_name = Column(String(100), nullable=True)
@@ -227,6 +227,17 @@ class ExternalDataSource(Base):
     supabase_bucket = Column(String(100), nullable=True)
     file_path_prefix = Column(String(200), nullable=True)  # e.g., "resume/"
     
+    # Request/Approval Workflow
+    institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True, index=True)
+    requested_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    approved_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    request_status = Column(String(20), nullable=False, default="approved", index=True)  # pending, approved, rejected
+    data_classification = Column(String(20), nullable=True, index=True)  # public, educational, confidential, institutional
+    request_notes = Column(Text, nullable=True)
+    rejection_reason = Column(Text, nullable=True)
+    requested_at = Column(DateTime, nullable=True, default=datetime.utcnow)
+    approved_at = Column(DateTime, nullable=True)
+    
     # Sync configuration
     sync_enabled = Column(Boolean, nullable=False, default=True)
     sync_frequency = Column(String(20), nullable=False, default="daily")
@@ -240,6 +251,11 @@ class ExternalDataSource(Base):
     # Timestamps
     created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    institution = relationship("Institution", foreign_keys=[institution_id])
+    requested_by = relationship("User", foreign_keys=[requested_by_user_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_user_id])
 
 
 class SyncLog(Base):

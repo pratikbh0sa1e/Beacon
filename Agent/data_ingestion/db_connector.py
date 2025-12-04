@@ -28,12 +28,50 @@ class ExternalDBConnector:
         self.cipher = Fernet(self.encryption_key.encode())
     
     def encrypt_password(self, password: str) -> str:
-        """Encrypt database password"""
-        return self.cipher.encrypt(password.encode()).decode()
+        """
+        Encrypt database password
+        
+        Args:
+            password: Plaintext password to encrypt
+            
+        Returns:
+            Encrypted password as base64 string
+            
+        Raises:
+            ValueError: If password is empty or invalid
+            Exception: If encryption fails
+        """
+        if not password:
+            raise ValueError("Password cannot be empty")
+        
+        try:
+            return self.cipher.encrypt(password.encode()).decode()
+        except Exception as e:
+            logger.error(f"Password encryption failed: {str(e)}")
+            raise Exception(f"Failed to encrypt password: {str(e)}")
     
     def decrypt_password(self, encrypted_password: str) -> str:
-        """Decrypt database password"""
-        return self.cipher.decrypt(encrypted_password.encode()).decode()
+        """
+        Decrypt database password
+        
+        Args:
+            encrypted_password: Encrypted password as base64 string
+            
+        Returns:
+            Decrypted plaintext password
+            
+        Raises:
+            ValueError: If encrypted_password is empty or invalid
+            Exception: If decryption fails
+        """
+        if not encrypted_password:
+            raise ValueError("Encrypted password cannot be empty")
+        
+        try:
+            return self.cipher.decrypt(encrypted_password.encode()).decode()
+        except Exception as e:
+            logger.error(f"Password decryption failed: {str(e)}")
+            raise Exception(f"Failed to decrypt password: {str(e)}")
     
     def test_connection(self, host: str, port: int, database: str, 
                        username: str, password: str) -> Dict[str, Any]:
@@ -54,9 +92,19 @@ class ExternalDBConnector:
             )
             conn.close()
             return {"status": "success", "message": "Connection successful"}
-        except Exception as e:
+        except psycopg2.OperationalError as e:
+            # Import here to avoid circular dependency
+            from backend.utils.error_handlers import handle_connection_error
             logger.error(f"Connection test failed: {str(e)}")
-            return {"status": "failed", "message": str(e)}
+            return handle_connection_error(e, host, port, database)
+        except Exception as e:
+            logger.error(f"Connection test failed with unexpected error: {str(e)}")
+            return {
+                "status": "failed",
+                "error_code": "UNKNOWN_ERROR",
+                "message": f"Connection test failed: {str(e)}",
+                "details": {"host": host, "port": port, "database": database}
+            }
     
     def fetch_documents(self, 
                        host: str, 
@@ -139,8 +187,33 @@ class ExternalDBConnector:
             logger.info(f"Fetched {len(documents)} documents from {table_name}")
             return documents
             
+        except psycopg2.OperationalError as e:
+            # Connection errors
+            from backend.utils.error_handlers import handle_connection_error
+            error_info = handle_connection_error(e, host, port, database)
+            logger.error(f"Connection error fetching documents: {error_info['message']}")
+            raise ConnectionError(error_info['message'])
+        
+        except psycopg2.ProgrammingError as e:
+            # SQL errors (table not found, column not found, etc.)
+            error_str = str(e).lower()
+            if "relation" in error_str and "does not exist" in error_str:
+                logger.error(f"Table '{table_name}' not found")
+                raise ValueError(f"Table '{table_name}' does not exist in database '{database}'")
+            elif "column" in error_str and "does not exist" in error_str:
+                logger.error(f"Column not found in table '{table_name}'")
+                raise ValueError(f"One or more columns not found in table '{table_name}'. Check file_column, filename_column, and metadata_columns.")
+            else:
+                logger.error(f"SQL error fetching documents: {str(e)}")
+                raise ValueError(f"SQL error: {str(e)}")
+        
+        except psycopg2.Error as e:
+            # Other PostgreSQL errors
+            logger.error(f"PostgreSQL error fetching documents: {str(e)}")
+            raise Exception(f"Database error: {str(e)}")
+        
         except Exception as e:
-            logger.error(f"Error fetching documents: {str(e)}")
+            logger.error(f"Unexpected error fetching documents: {str(e)}")
             raise
     
     def fetch_new_documents_since(self,

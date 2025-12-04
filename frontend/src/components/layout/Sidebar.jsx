@@ -15,6 +15,7 @@ import {
   Star,
   CheckCircle,
   StickyNote,
+  Database,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -65,6 +66,60 @@ const menuItems = [
   },
 ];
 
+// Data Source menu items - role-based structure
+const getDataSourceMenuItems = (userRole) => {
+  if (!userRole) return [];
+
+  // Students and Faculty (public_viewer) should NOT see data source menu
+  if (userRole === "student" || userRole === "public_viewer") {
+    return [];
+  }
+
+  // Ministry Admin and University Admin see: Submit Request, My Requests
+  if (userRole === "ministry_admin" || userRole === "university_admin") {
+    return [
+      {
+        icon: Database,
+        label: "Submit Request",
+        path: "/admin/data-sources",
+        roles: ["ministry_admin", "university_admin"],
+      },
+      {
+        icon: Database,
+        label: "My Requests",
+        path: "/admin/my-data-source-requests",
+        roles: ["ministry_admin", "university_admin"],
+      },
+    ];
+  }
+
+  // Developer sees: Pending Approvals, Active Sources, All Requests
+  if (userRole === "developer") {
+    return [
+      {
+        icon: Shield,
+        label: "Pending Approvals",
+        path: "/admin/data-source-approvals",
+        roles: ["developer"],
+      },
+      {
+        icon: Database,
+        label: "Active Sources",
+        path: "/admin/active-sources",
+        roles: ["developer"],
+      },
+      {
+        icon: Database,
+        label: "All Requests",
+        path: "/admin/my-data-source-requests",
+        roles: ["developer"],
+      },
+    ];
+  }
+
+  return [];
+};
+
 export const Sidebar = ({ isOpen, onClose }) => {
   const location = useLocation();
   const { user } = useAuthStore();
@@ -72,6 +127,10 @@ export const Sidebar = ({ isOpen, onClose }) => {
   const filteredMenuItems = menuItems.filter(
     (item) => item.roles.length === 0 || item.roles.includes(user?.role)
   );
+
+  // Add data source menu items based on role
+  const dataSourceItems = getDataSourceMenuItems(user?.role);
+  const allMenuItems = [...filteredMenuItems, ...dataSourceItems];
 
   return (
     <>
@@ -106,7 +165,7 @@ export const Sidebar = ({ isOpen, onClose }) => {
           </div>
 
           <nav className="flex-1 space-y-1 p-4 overflow-y-auto scrollbar-hide">
-            {filteredMenuItems.map((item) => {
+            {allMenuItems.map((item) => {
               const Icon = item.icon;
               const isActive = location.pathname === item.path;
 

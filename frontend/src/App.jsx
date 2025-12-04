@@ -39,6 +39,10 @@ import { UserManagementPage } from "./pages/admin/UserManagementPage";
 import { InstitutionsPage } from "./pages/admin/InstitutionsPage";
 import { AnalyticsPage } from "./pages/admin/AnalyticsPage";
 import { SystemHealthPage } from "./pages/admin/SystemHealthPage";
+import { DataSourceRequestPage } from "./pages/admin/DataSourceRequestPage";
+import { DataSourceApprovalPage } from "./pages/admin/DataSourceApprovalPage";
+import { ActiveSourcesPage } from "./pages/admin/ActiveSourcesPage";
+import { MyDataSourceRequestsPage } from "./pages/admin/MyDataSourceRequestsPage";
 
 // Bookmark Page
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -201,6 +205,50 @@ const App = () => {
               element={
                 <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                   <InstitutionsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="data-sources"
+              element={
+                <ProtectedRoute
+                  allowedRoles={["ministry_admin", "university_admin"]}
+                >
+                  <DataSourceRequestPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="my-data-source-requests"
+              element={
+                <ProtectedRoute
+                  allowedRoles={[
+                    "ministry_admin",
+                    "university_admin",
+                    "developer",
+                  ]}
+                >
+                  <MyDataSourceRequestsPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="data-source-approvals"
+              element={
+                <ProtectedRoute allowedRoles={["developer"]}>
+                  <DataSourceApprovalPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="active-sources"
+              element={
+                <ProtectedRoute allowedRoles={["developer"]}>
+                  <ActiveSourcesPage />
                 </ProtectedRoute>
               }
             />
