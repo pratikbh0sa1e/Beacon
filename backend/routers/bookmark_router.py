@@ -6,6 +6,18 @@ from backend.routers.auth_router import get_current_user
 
 router = APIRouter(tags=["bookmarks"])
 
+# Try to import caching decorator
+try:
+    from fastapi_cache.decorator import cache
+    CACHE_AVAILABLE = True
+except ImportError:
+    # Fallback no-op decorator if cache not installed
+    def cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    CACHE_AVAILABLE = False
+
 @router.post("/toggle/{document_id}")
 async def toggle_bookmark(
     document_id: int,
@@ -35,11 +47,12 @@ async def toggle_bookmark(
         return {"status": "added", "message": "Bookmark added"}
 
 @router.get("/list")
+@cache(expire=30)  # Cache for 30 seconds - bookmarks don't change frequently
 async def list_bookmarks(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Get all bookmarked document IDs for current user"""
+    """Get all bookmarked document IDs for current user (cached for 30s)"""
     bookmarks = db.query(Bookmark).filter(Bookmark.user_id == current_user.id).all()
     # Return list of document IDs
     return [b.document_id for b in bookmarks]

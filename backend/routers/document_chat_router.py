@@ -22,6 +22,18 @@ load_dotenv()
 
 router = APIRouter(prefix="/documents/{document_id}/chat", tags=["document-chat"])
 
+# Try to import caching decorator
+try:
+    from fastapi_cache.decorator import cache
+    CACHE_AVAILABLE = True
+except ImportError:
+    # Fallback no-op decorator if cache not installed
+    def cache(*args, **kwargs):
+        def decorator(func):
+            return func
+        return decorator
+    CACHE_AVAILABLE = False
+
 # Global SSE connections manager
 active_connections = {}  # {document_id: {user_id: queue}}
 
@@ -505,15 +517,27 @@ async def get_participants(
 
 
 @router.get("/search-users")
+@cache(expire=60)  # Cache for 1 minute - users don't change frequently
 async def search_users_for_mention(
     document_id: int,
     query: str = Query(..., min_length=1),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Search users for @mention autocomplete"""
+    """Search users for @mention autocomplete (cached for 60s)"""
     document = check_document_access(document_id, current_user, db)
     
+    # Hardcode @beacon as first result if query matches
+    results = []
+    if "beacon".startswith(query.lower()) or query.lower() in "beacon":
+        results.append({
+            "id": None,
+            "name": "Beacon AI",
+            "email": "@beacon",
+            "type": "ai_assistant"
+        })
+    
+    # Search for users
     from sqlalchemy import or_
     users = db.query(User).filter(
         or_(
@@ -522,16 +546,17 @@ async def search_users_for_mention(
         )
     ).limit(10).all()
     
-    accessible_users = []
+    # Filter to only users who can access this document
     for user in users:
         try:
             check_document_access(document_id, user, db)
-            accessible_users.append({
+            results.append({
                 "id": user.id,
                 "name": user.name,
-                "email": user.email
+                "email": user.email,
+                "type": "user"
             })
         except:
             pass
     
-    return accessible_users
+    return results

@@ -268,9 +268,9 @@ class ConflictDetector:
                 result = self.lazy_embedder.embed_document(doc_id)
                 
                 if result['status'] == 'success':
-                    logger.info(f"✅ Embedded candidate {doc_id}: {result['num_chunks']} chunks")
+                    logger.info(f"Embedded candidate {doc_id}: {result['num_chunks']} chunks")
                 else:
-                    logger.warning(f"⚠️ Failed to embed candidate {doc_id}: {result.get('message')}")
+                    logger.warning(f"Failed to embed candidate {doc_id}: {result.get('message')}")
             else:
                 logger.info(f"Document {doc_id} already embedded, skipping")
     

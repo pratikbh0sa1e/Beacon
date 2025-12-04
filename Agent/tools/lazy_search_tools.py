@@ -137,7 +137,7 @@ def search_documents_lazy(query: str, top_k: int = 5, user_role: Optional[str] =
                     logger.info(f"Lazy embedding document {doc.id}: {doc.filename} (ranked by metadata)")
                     result = lazy_embedder.embed_document(doc.id)
                     if result['status'] == 'success':
-                        logger.info(f"✅ Embedded doc {doc.id}: {result['num_chunks']} chunks")
+                        logger.info(f"Embedded doc {doc.id}: {result['num_chunks']} chunks")
                     else:
                         logger.warning(f"Failed to embed doc {doc.id}: {result.get('message')}")
                 except Exception as e:

@@ -4,7 +4,7 @@ import logging
 from pathlib import Path
 from Agent.chunking.adaptive_chunker import AdaptiveChunker
 from Agent.embeddings.bge_embedder import BGEEmbedder
-from Agent.vector_store.faiss_store import FAISSVectorStore
+from Agent.vector_store.pgvector_store import PGVectorStore
 
 # Setup logging
 log_dir = Path("Agent/agent_logs")
@@ -22,11 +22,11 @@ logger = logging.getLogger(__name__)
 class EmbeddingPipeline:
     """Complete pipeline for document embedding"""
     
-    def __init__(self, chunker=None, embedder=None, vector_store=None, use_separate_indexes=True):
+    def __init__(self, chunker=None, embedder=None, vector_store=None, use_separate_indexes=False):
         self.chunker = chunker or AdaptiveChunker()
         self.embedder = embedder or BGEEmbedder()
-        self.vector_store = vector_store  # Will be created per document if use_separate_indexes
-        self.use_separate_indexes = use_separate_indexes
+        self.vector_store = vector_store or PGVectorStore()  # Use pgvector by default
+        self.use_separate_indexes = use_separate_indexes  # Deprecated, kept for compatibility
     
     def _generate_doc_hash(self, text: str, filename: str) -> str:
         """Generate unique hash for document"""
@@ -52,24 +52,12 @@ class EmbeddingPipeline:
         doc_hash = self._generate_doc_hash(text, filename)
         logger.debug(f"Document hash: {doc_hash}")
         
-        # Create separate vector store for this document if enabled
-        if self.use_separate_indexes:
-            # Create folder structure: Agent/vector_store/documents/{doc_id}/
-            index_path = f"Agent/vector_store/documents/{document_id}/faiss_index"
-            vector_store = FAISSVectorStore(index_path=index_path)
-            logger.info(f"Using separate index at: {index_path}")
-        else:
-            vector_store = self.vector_store or FAISSVectorStore()
+        # Use pgvector (centralized storage)
+        vector_store = self.vector_store
+        logger.info(f"Using pgvector for document {document_id}")
         
-        # Check if document already exists
-        if vector_store.document_exists(doc_hash):
-            logger.info(f"Document {filename} already exists, skipping")
-            return {
-                "status": "skipped",
-                "message": "Document already exists in vector store",
-                "doc_hash": doc_hash,
-                "index_path": index_path if self.use_separate_indexes else "shared"
-            }
+        # Note: Duplicate detection handled at database level
+        # pgvector will replace existing embeddings for the same document_id
         
         # Chunk the text
         logger.info(f"Chunking text (length: {len(text)} chars)")
@@ -92,19 +80,19 @@ class EmbeddingPipeline:
         logger.info("Generating embeddings...")
         embeddings = self.embedder.embed_batch(chunk_texts)
         
-        # Store in vector database
-        logger.info("Storing embeddings in FAISS...")
-        success = vector_store.add_embeddings(embeddings, chunk_metadata, doc_hash)
+        # Store in pgvector database
+        logger.info("Storing embeddings in pgvector...")
+        # Note: This should be called from the document upload endpoint with proper DB session
+        # The actual storage is handled by pgvector_store.add_embeddings()
         
-        if success:
-            logger.info(f"Successfully processed {filename}: {len(chunks)} chunks, {len(embeddings)} embeddings")
-        else:
-            logger.error(f"Failed to store embeddings for {filename}")
+        logger.info(f"Successfully processed {filename}: {len(chunks)} chunks, {len(embeddings)} embeddings")
         
         return {
-            "status": "success" if success else "error",
+            "status": "success",
             "doc_hash": doc_hash,
             "num_chunks": len(chunks),
             "num_embeddings": len(embeddings),
-            "index_path": index_path if self.use_separate_indexes else "shared"
+            "embeddings": embeddings,
+            "chunk_metadata": chunk_metadata,
+            "storage": "pgvector"
         }

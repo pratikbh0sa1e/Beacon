@@ -19,19 +19,22 @@ DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
 
 DATABASE_URL = f"postgresql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_HOSTNAME}:{DATABASE_PORT}/{DATABASE_NAME}"
 
-# Create engine with connection pooling and timeout settings
+# Create engine with optimized connection pooling and timeout settings
 engine = create_engine(
     DATABASE_URL,
-    pool_size=10,
-    max_overflow=20,
-    pool_pre_ping=True,
-    pool_recycle=3600,
+    pool_size=30,  # Increased for better concurrency
+    max_overflow=60,  # Increased for peak loads
+    pool_pre_ping=True,  # Verify connections before use
+    pool_recycle=900,  # Recycle connections every 15 min for freshness
+    pool_timeout=30,  # Timeout for getting connection from pool
+    echo=False,  # Disable SQL logging in production for performance
     connect_args={
-        "connect_timeout": 10,
+        "connect_timeout": 5,  # Fast failure detection
         "keepalives": 1,
         "keepalives_idle": 30,
         "keepalives_interval": 10,
         "keepalives_count": 5,
+        "application_name": "beacon_app",  # For monitoring
     }
 )
 
@@ -158,6 +161,16 @@ class Document(Base):
     )
     
     institution = relationship("Institution")
+    
+    # Performance indexes for frequently queried columns
+    __table_args__ = (
+        Index('idx_doc_visibility_institution', 'visibility_level', 'institution_id'),
+        Index('idx_doc_approval_status', 'approval_status'),
+        Index('idx_doc_uploader', 'uploader_id'),
+        Index('idx_doc_uploaded_at', 'uploaded_at'),
+        Index('idx_doc_institution', 'institution_id'),
+        Index('idx_doc_requires_moe', 'requires_moe_approval'),
+    )
 
 
 class DocumentMetadata(Base):
@@ -195,6 +208,15 @@ class DocumentMetadata(Base):
     
     # Relationship
     document = relationship("Document", back_populates="doc_metadata_rel")
+    
+    # Performance indexes for search and filtering
+    __table_args__ = (
+        Index('idx_meta_doc_type', 'document_type'),
+        Index('idx_meta_department', 'department'),
+        Index('idx_meta_updated_at', 'updated_at'),
+        Index('idx_meta_embedding_status', 'embedding_status'),
+        Index('idx_meta_metadata_status', 'metadata_status'),
+    )
 
 
 class ExternalDataSource(Base):
@@ -313,6 +335,12 @@ class Bookmark(Base):
     # Relationships
     user = relationship("User", back_populates="bookmarks")
     document = relationship("Document", back_populates="bookmarks")
+    
+    # Performance indexes (in addition to unique constraint)
+    __table_args__ = (
+        UniqueConstraint("user_id", "document_id", name="unique_user_document_bookmark"),
+        Index('idx_bookmarks_user_created', 'user_id', 'created_at'),
+    )
 
 
 class Notification(Base):
@@ -349,6 +377,13 @@ class Notification(Base):
     
     # Relationship
     user = relationship("User", foreign_keys=[user_id])
+    
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_notifications_user_read', 'user_id', 'read'),
+        Index('idx_notifications_created', 'created_at'),
+        Index('idx_notifications_user_type', 'user_id', 'type'),
+    )
 
 
 class ChatSession(Base):
@@ -383,6 +418,11 @@ class ChatMessage(Base):
     
     # Relationship
     session = relationship("ChatSession", back_populates="messages")
+    
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_chat_messages_session_created', 'session_id', 'created_at'),
+    )
 
 
 class DocumentEmbedding(Base):
@@ -445,6 +485,12 @@ class DocumentChatMessage(Base):
     user = relationship("User", foreign_keys=[user_id])
     parent_message = relationship("DocumentChatMessage", remote_side=[id], foreign_keys=[parent_message_id])
     replies = relationship("DocumentChatMessage", back_populates="parent_message", foreign_keys=[parent_message_id])
+    
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_doc_chat_messages_doc_created', 'document_id', 'created_at'),
+        Index('idx_doc_chat_messages_user', 'user_id'),
+    )
 
 
 class DocumentChatParticipant(Base):

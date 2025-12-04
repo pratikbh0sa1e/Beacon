@@ -87,7 +87,7 @@ class BGEEmbedder:
         BGEEmbedder._dimension = self.dimension
         BGEEmbedder._active_model_key = ACTIVE_MODEL
         
-        logger.info(f"✅ Model loaded! Embedding dimension: {self.dimension}")
+        logger.info(f"Model loaded successfully! Embedding dimension: {self.dimension}")
     
     def _init_sentence_transformer(self, model_name: str, device: str = None):
         """Initialize Sentence Transformer model"""
