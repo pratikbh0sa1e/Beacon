@@ -1,0 +1,231 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    BEACON - SIH Quick Start Guide                            ║
+║                        3 Branches, Same Backend                              ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+🚀 SETUP (One-time)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Windows:
+  setup-branches.bat
+
+Linux/Mac:
+  chmod +x setup-branches.sh
+  ./setup-branches.sh
+
+Manual:
+  See GIT_BRANCH_STRATEGY.txt
+
+
+📅 FOR ROUND 1 DEMO (Week 1-2)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Switch to round-1 branch:
+   git checkout round-1
+
+2. Start backend:
+   cd backend
+   uvicorn main:app --reload
+
+3. Start frontend:
+   cd frontend
+   npm run dev
+
+4. Demo shows:
+   ✅ Login/Register
+   ✅ Document Upload
+   ✅ AI Chat with Citations
+   ✅ Basic Search
+   ❌ Voice (hidden)
+   ❌ Notifications (hidden)
+   ❌ Approvals (hidden)
+
+
+📅 FOR ROUND 2 DEMO (Week 3-4)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Switch to round-2 branch:
+   git checkout round-2
+
+2. Start backend:
+   cd backend
+   uvicorn main:app --reload
+
+3. Start frontend:
+   cd frontend
+   npm run dev
+
+4. Demo shows:
+   ✅ All Round 1 features
+   ✅ Voice Query
+   ✅ Notifications
+   ✅ Approval Workflows
+   ✅ Multilingual
+   ✅ Bookmarks & Notes
+   ❌ Analytics (hidden)
+   ❌ External Sync (hidden)
+
+
+📅 FOR ROUND 3 DEMO (Week 5-6)
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Switch to round-3 branch:
+   git checkout round-3
+
+2. Start backend:
+   cd backend
+   uvicorn main:app --reload
+
+3. Start frontend:
+   cd frontend
+   npm run dev
+
+4. Demo shows:
+   ✅ All Round 2 features
+   ✅ Analytics Dashboard
+   ✅ External Data Sync
+   ✅ Document Chat Rooms
+   ✅ System Health
+
+
+🔧 HOW IT WORKS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Backend:
+  - Same code in all branches
+  - All APIs exist
+  - All features work
+
+Frontend:
+  - One file controls visibility: frontend/src/config/featureFlags.js
+  - CURRENT_ROUND = 1, 2, or 3
+  - Components check feature flags before rendering
+
+Example:
+  <FeatureFlag feature="VOICE_QUERY">
+    <VoiceButton />
+  </FeatureFlag>
+
+  Round 1: VOICE_QUERY = false → Button hidden
+  Round 2: VOICE_QUERY = true → Button visible
+
+
+📝 USING FEATURE FLAGS IN YOUR CODE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Import:
+  import FeatureFlag from '../components/FeatureFlag';
+  import { isFeatureEnabled } from '../config/featureFlags';
+
+Conditional Rendering:
+  <FeatureFlag feature="BOOKMARKS">
+    <BookmarkButton />
+  </FeatureFlag>
+
+Conditional Logic:
+  if (isFeatureEnabled('VOICE_QUERY')) {
+    // Show voice input
+  }
+
+Conditional Routes:
+  {isFeatureEnabled('ANALYTICS') && (
+    <Route path="/analytics" element={<AnalyticsPage />} />
+  )}
+
+See: frontend/src/examples/FeatureFlagExamples.jsx
+
+
+🔄 SWITCHING BETWEEN ROUNDS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Check current branch:
+  git branch
+
+Switch to Round 1:
+  git checkout round-1
+
+Switch to Round 2:
+  git checkout round-2
+
+Switch to Round 3:
+  git checkout round-3
+
+View all branches:
+  git branch -a
+
+
+🐛 MAKING CHANGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Backend Bug Fix (applies to all):
+  1. Fix on round-3
+  2. Merge to round-2: git checkout round-2 && git merge round-3
+  3. Merge to round-1: git checkout round-1 && git merge round-2
+
+Frontend Change (specific to one round):
+  1. Checkout that branch
+  2. Make changes
+  3. Commit
+  4. Do NOT merge to other branches
+
+
+✅ VERIFICATION
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Round 1:
+  - Voice button NOT in header
+  - Notifications NOT visible
+  - Bookmarks NOT in sidebar
+
+Round 2:
+  - Voice button in header
+  - Notifications visible
+  - Bookmarks in sidebar
+  - Analytics NOT visible
+
+Round 3:
+  - Everything visible
+  - Analytics in menu
+  - System Health visible
+
+
+🚨 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Wrong features showing:
+  1. Check: git branch (are you on correct branch?)
+  2. Check: frontend/src/config/featureFlags.js (CURRENT_ROUND value)
+  3. Clear browser cache (Ctrl+Shift+R)
+
+Backend not working:
+  - Backend is same across all branches
+  - Check if server is running
+  - Check .env file
+
+Database errors:
+  - Same database for all branches
+  - Run: alembic upgrade head
+
+
+📞 FILES TO READ
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. GIT_BRANCH_STRATEGY.txt - Detailed branching guide
+2. frontend/src/config/featureFlags.js - Feature flag configuration
+3. frontend/src/examples/FeatureFlagExamples.jsx - Usage examples
+4. SIH_ROADMAP.md - Complete SIH preparation guide
+
+
+🎯 REMEMBER
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Backend is SAME across all branches
+✓ Frontend controls visibility via feature flags
+✓ Database is SHARED
+✓ Demo data is SHARED
+✓ Only CURRENT_ROUND value changes between branches
+
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           Good luck with SIH! 🚀                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝

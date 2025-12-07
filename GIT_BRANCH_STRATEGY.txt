@@ -1,0 +1,352 @@
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                    BEACON - Git Branch Strategy for SIH                      ║
+║                  Backend Same, Frontend Feature Flags                        ║
+╚══════════════════════════════════════════════════════════════════════════════╝
+
+📋 OVERVIEW
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Strategy: 3 branches (round-1, round-2, round-3/main)
+Backend: Identical across all branches (all APIs exist)
+Frontend: Feature flags control what's visible
+
+Branch Structure:
+  main (round-3) ← Production-ready, all features
+    ↑
+  round-2 ← Advanced prototype
+    ↑
+  round-1 ← MVP only
+
+
+🚀 STEP-BY-STEP SETUP
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+STEP 1: Create Round 1 Branch (MVP)
+────────────────────────────────────────────────────────────────────────────────
+
+# From your current branch (copy or main)
+git checkout -b round-1
+
+# Edit frontend/src/config/featureFlags.js
+# Change: const CURRENT_ROUND = 1;
+
+# Commit
+git add frontend/src/config/featureFlags.js
+git commit -m "feat: Round 1 - MVP with core features only"
+
+# Push
+git push -u origin round-1
+
+
+STEP 2: Create Round 2 Branch (Advanced)
+────────────────────────────────────────────────────────────────────────────────
+
+# Create from round-1
+git checkout round-1
+git checkout -b round-2
+
+# Edit frontend/src/config/featureFlags.js
+# Change: const CURRENT_ROUND = 2;
+
+# Commit
+git add frontend/src/config/featureFlags.js
+git commit -m "feat: Round 2 - Enable workflows, approvals, multilingual"
+
+# Push
+git push -u origin round-2
+
+
+STEP 3: Setup Round 3 (Production) as Main
+────────────────────────────────────────────────────────────────────────────────
+
+# Option A: If main already has all features
+git checkout main
+# Edit frontend/src/config/featureFlags.js
+# Change: const CURRENT_ROUND = 3;
+git add frontend/src/config/featureFlags.js
+git commit -m "feat: Round 3 - Production ready with all features"
+git push
+
+# Option B: Create round-3 branch
+git checkout round-2
+git checkout -b round-3
+# Edit frontend/src/config/featureFlags.js
+# Change: const CURRENT_ROUND = 3;
+git add frontend/src/config/featureFlags.js
+git commit -m "feat: Round 3 - Production ready with all features"
+git push -u origin round-3
+
+
+📦 WHAT'S IN EACH BRANCH
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Branch: round-1 (MVP - 35-40%)
+────────────────────────────────────────────────────────────────────────────────
+Backend: All APIs (same as other branches)
+Frontend: CURRENT_ROUND = 1
+
+✅ VISIBLE:
+  - Login/Register
+  - Document Upload (PDF, DOCX, PPT)
+  - Document List & Search
+  - AI Chat with Citations
+  - Basic Dashboard
+  - Basic Roles (Developer, Admin, Student)
+
+❌ HIDDEN:
+  - Voice Query
+  - Notifications
+  - Approval Workflows
+  - Bookmarks & Notes
+  - Analytics
+  - External Data Sync
+  - Document Chat Rooms
+  - System Health
+
+
+Branch: round-2 (Advanced - 75-80%)
+────────────────────────────────────────────────────────────────────────────────
+Backend: All APIs (same as other branches)
+Frontend: CURRENT_ROUND = 2
+
+✅ VISIBLE (All Round 1 + these):
+  - All Roles (University Admin, Document Officer)
+  - Document Approval Workflow
+  - User Approval Workflow
+  - Notifications (toast + panel)
+  - Voice Query (English + Hindi)
+  - Multilingual Support
+  - Metadata Extraction
+  - Bookmarks (basic)
+  - Notes (basic)
+  - Institution Management
+
+❌ HIDDEN:
+  - External Data Sync
+  - Analytics Dashboard
+  - Document Chat Rooms
+  - System Health Dashboard
+
+
+Branch: round-3 / main (Production - 95-100%)
+────────────────────────────────────────────────────────────────────────────────
+Backend: All APIs (same as other branches)
+Frontend: CURRENT_ROUND = 3
+
+✅ VISIBLE (Everything):
+  - All Round 2 features
+  - External Data Source Integration
+  - Scheduled Sync
+  - Analytics Dashboard
+  - Activity Heatmap
+  - Document Chat Rooms
+  - System Health Dashboard
+  - Document Versioning
+  - Document Expiry
+  - Download Restrictions
+  - Audit Logs
+
+
+🔄 WORKFLOW FOR DEMOS
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+For Round 1 Demo:
+────────────────────────────────────────────────────────────────────────────────
+git checkout round-1
+cd frontend
+npm run dev
+# Demo shows only MVP features
+
+
+For Round 2 Demo:
+────────────────────────────────────────────────────────────────────────────────
+git checkout round-2
+cd frontend
+npm run dev
+# Demo shows MVP + Advanced features
+
+
+For Round 3 Demo:
+────────────────────────────────────────────────────────────────────────────────
+git checkout round-3  # or main
+cd frontend
+npm run dev
+# Demo shows all features
+
+
+🔧 MAKING CHANGES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Backend Changes (applies to all branches):
+────────────────────────────────────────────────────────────────────────────────
+# Make changes on main/round-3
+git checkout main
+# ... make backend changes ...
+git add backend/
+git commit -m "fix: backend bug fix"
+git push
+
+# Merge to round-2
+git checkout round-2
+git merge main --no-ff -m "merge: backend fixes from main"
+git push
+
+# Merge to round-1
+git checkout round-1
+git merge round-2 --no-ff -m "merge: backend fixes from round-2"
+git push
+
+
+Frontend Changes (specific to each round):
+────────────────────────────────────────────────────────────────────────────────
+# Make changes on the specific branch
+git checkout round-1
+# ... make UI changes for Round 1 ...
+git add frontend/
+git commit -m "fix: UI improvements for Round 1"
+git push
+
+# Do NOT merge frontend changes between branches
+# Each branch has its own CURRENT_ROUND value
+
+
+Bug Fixes (applies to all):
+────────────────────────────────────────────────────────────────────────────────
+# Fix on main first
+git checkout main
+# ... fix bug ...
+git commit -m "fix: critical bug"
+git push
+
+# Cherry-pick to other branches
+git checkout round-2
+git cherry-pick <commit-hash>
+git push
+
+git checkout round-1
+git cherry-pick <commit-hash>
+git push
+
+
+📝 IMPORTANT NOTES
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+1. Backend is IDENTICAL across all branches
+   - All API endpoints exist
+   - All database tables exist
+   - All backend logic exists
+
+2. Frontend controls visibility via featureFlags.js
+   - Only ONE file changes between branches: featureFlags.js
+   - Change CURRENT_ROUND = 1, 2, or 3
+
+3. Database is SHARED
+   - Use same database for all branches
+   - All data is compatible
+
+4. Environment variables are SAME
+   - Same .env file works for all branches
+
+5. Demo data is SHARED
+   - Upload documents once, visible in all branches
+   - Create users once, available in all branches
+
+6. For judges:
+   - Show round-1 for Round 1 demo
+   - Show round-2 for Round 2 demo
+   - Show round-3/main for Round 3 demo
+
+
+🎯 QUICK REFERENCE
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Switch to Round 1:
+  git checkout round-1
+
+Switch to Round 2:
+  git checkout round-2
+
+Switch to Round 3:
+  git checkout round-3  # or main
+
+Check current branch:
+  git branch
+
+View all branches:
+  git branch -a
+
+Delete local branch:
+  git branch -d branch-name
+
+Delete remote branch:
+  git push origin --delete branch-name
+
+
+🚨 TROUBLESHOOTING
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Problem: Features not showing/hiding
+Solution: Check frontend/src/config/featureFlags.js
+         Verify CURRENT_ROUND value is correct
+
+Problem: Backend API not working
+Solution: Backend is same across all branches
+         Check if backend server is running
+         Check .env file
+
+Problem: Database errors
+Solution: Run migrations: alembic upgrade head
+         Same database works for all branches
+
+Problem: Merge conflicts
+Solution: Only merge backend changes
+         Keep frontend/src/config/featureFlags.js separate
+
+Problem: Wrong features showing
+Solution: Clear browser cache
+         Hard refresh (Ctrl+Shift+R)
+         Check CURRENT_ROUND in featureFlags.js
+
+
+✅ VERIFICATION CHECKLIST
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+Round 1 Branch:
+  [ ] CURRENT_ROUND = 1 in featureFlags.js
+  [ ] Voice button NOT visible in header
+  [ ] Notifications NOT visible
+  [ ] Bookmarks NOT in sidebar
+  [ ] Analytics NOT in admin menu
+  [ ] Only basic features visible
+
+Round 2 Branch:
+  [ ] CURRENT_ROUND = 2 in featureFlags.js
+  [ ] Voice button visible in header
+  [ ] Notifications visible
+  [ ] Bookmarks in sidebar
+  [ ] Approval workflows visible
+  [ ] Analytics still NOT visible
+
+Round 3 Branch:
+  [ ] CURRENT_ROUND = 3 in featureFlags.js
+  [ ] All features visible
+  [ ] Analytics in admin menu
+  [ ] System Health visible
+  [ ] External Data Sync visible
+  [ ] Document Chat visible
+
+
+📞 SUPPORT
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+If you need help:
+1. Check this file first
+2. Check frontend/src/examples/FeatureFlagExamples.jsx
+3. Check git log: git log --oneline --graph --all
+4. Check current branch: git branch
+
+Remember: Backend is SAME, Frontend controls visibility!
+
+╔══════════════════════════════════════════════════════════════════════════════╗
+║                           Good luck with SIH! 🚀                             ║
+╚══════════════════════════════════════════════════════════════════════════════╝
