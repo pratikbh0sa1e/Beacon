@@ -612,3 +612,126 @@ class UserNote(Base):
         Index("idx_user_notes_user_document", "user_id", "document_id"),
         Index("idx_user_notes_created", "created_at"),
     )
+
+
+# ============================================================================
+# WEB SCRAPING MODELS - Added for automated document ingestion
+# ============================================================================
+
+class WebScrapingSource(Base):
+    """Web sources for automated document scraping"""
+    __tablename__ = "web_scraping_sources"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(200), unique=True, nullable=False)
+    url = Column(String(500), nullable=False)
+    description = Column(Text, nullable=True)
+    
+    # Source configuration
+    source_type = Column(String(50), default="government", nullable=False)  # government, academic, ministry
+    credibility_score = Column(Integer, default=5, nullable=False)  # 1-10
+    
+    # Scraping configuration
+    scraping_enabled = Column(Boolean, default=True, nullable=False)
+    scraping_frequency = Column(String(20), default="daily", nullable=False)  # daily, weekly, monthly
+    keywords = Column(ARRAY(String), nullable=True)  # Keywords to filter documents
+    max_documents_per_scrape = Column(Integer, default=50, nullable=True)
+    
+    # CSS selectors for targeted scraping (optional)
+    document_section_selector = Column(String(200), nullable=True)
+    
+    # Status tracking
+    last_scraped_at = Column(DateTime, nullable=True)
+    last_scrape_status = Column(String(20), nullable=True)  # success, failed, in_progress
+    last_scrape_message = Column(Text, nullable=True)
+    total_documents_scraped = Column(Integer, default=0, nullable=False)
+    
+    # Ownership
+    institution_id = Column(Integer, ForeignKey("institutions.id"), nullable=True, index=True)
+    created_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    institution = relationship("Institution", foreign_keys=[institution_id])
+    created_by = relationship("User", foreign_keys=[created_by_user_id])
+    scrape_logs = relationship("WebScrapingLog", back_populates="source", cascade="all, delete-orphan")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_web_sources_enabled', 'scraping_enabled'),
+        Index('idx_web_sources_institution', 'institution_id'),
+    )
+
+
+class WebScrapingLog(Base):
+    """Log of web scraping operations"""
+    __tablename__ = "web_scraping_logs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_id = Column(Integer, ForeignKey("web_scraping_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    source_name = Column(String(200), nullable=False)
+    
+    # Scraping results
+    status = Column(String(20), nullable=False)  # success, failed, partial
+    documents_found = Column(Integer, default=0, nullable=False)
+    documents_downloaded = Column(Integer, default=0, nullable=False)
+    documents_processed = Column(Integer, default=0, nullable=False)
+    documents_failed = Column(Integer, default=0, nullable=False)
+    
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+    
+    # Performance
+    scrape_duration_seconds = Column(Integer, nullable=True)
+    
+    # Timestamps
+    started_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    # Relationships
+    source = relationship("WebScrapingSource", back_populates="scrape_logs")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_web_scrape_logs_source_date', 'source_id', 'started_at'),
+        Index('idx_web_scrape_logs_status', 'status'),
+    )
+
+
+class ScrapedDocument(Base):
+    """Track documents that were scraped from web sources"""
+    __tablename__ = "scraped_documents"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    source_id = Column(Integer, ForeignKey("web_scraping_sources.id", ondelete="SET NULL"), nullable=True, index=True)
+    
+    # Provenance information
+    source_url = Column(String(500), nullable=False)  # Original document URL
+    source_page = Column(String(500), nullable=True)  # Page where document was found
+    source_domain = Column(String(200), nullable=False, index=True)
+    credibility_score = Column(Integer, default=5, nullable=False)
+    
+    # Scraping metadata
+    scraped_at = Column(DateTime, nullable=False, index=True)
+    file_hash = Column(String(64), nullable=True, index=True)  # SHA256 for deduplication
+    
+    # Additional metadata
+    provenance_metadata = Column(JSONB, nullable=True)  # Full provenance record
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    document = relationship("Document", foreign_keys=[document_id])
+    source = relationship("WebScrapingSource", foreign_keys=[source_id])
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_scraped_docs_source', 'source_id'),
+        Index('idx_scraped_docs_domain', 'source_domain'),
+        Index('idx_scraped_docs_hash', 'file_hash'),
+    )
