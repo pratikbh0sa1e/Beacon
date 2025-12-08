@@ -21,6 +21,13 @@ ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_DAYS = 7
 
 
+@router.get("/password-requirements")
+async def get_password_requirements():
+    """Get password strength requirements for frontend validation"""
+    from backend.utils.password_validator import get_password_requirements
+    return get_password_requirements()
+
+
 class RegisterRequest(BaseModel):
     name: str
     email: EmailStr
@@ -113,11 +120,17 @@ async def register(request: RegisterRequest, db: Session = Depends(get_db)):
     """
     from backend.utils.email_validator import validate_email
     from backend.utils.email_service import send_verification_email
+    from backend.utils.password_validator import validate_password_strength
     import secrets
     
     # Validate role
     if request.role not in ALL_ROLES:
         raise HTTPException(status_code=400, detail=f"Invalid role. Must be one of: {ALL_ROLES}")
+    
+    # Validate password strength
+    is_valid_password, password_error = validate_password_strength(request.password)
+    if not is_valid_password:
+        raise HTTPException(status_code=400, detail=password_error)
     
     # Validate email format and domain
     is_valid, error_message = validate_email(request.email, request.role)

@@ -18,7 +18,8 @@ from backend.routers import (
     voice_router,
     insights_router,
     document_chat_router,
-    notes_router
+    notes_router,
+    ocr_router
 )
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
@@ -91,6 +92,7 @@ app.include_router(notification_router.router, prefix="/notifications", tags=["n
 app.include_router(insights_router.router, tags=["insights"])
 app.include_router(document_chat_router.router, tags=["document-chat"])
 app.include_router(notes_router.router, tags=["notes"])
+app.include_router(ocr_router.router, prefix="/ocr", tags=["ocr"])
 
 @app.get("/")
 async def root():

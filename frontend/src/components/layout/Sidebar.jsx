@@ -17,6 +17,7 @@ import {
   StickyNote,
   Database,
   HelpCircle,
+  FileSearch,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -40,6 +41,12 @@ const menuItems = [
     label: "Document Approvals",
     path: "/approvals",
     roles: ["developer", "ministry_admin", "university_admin"],
+  },
+  {
+    icon: FileSearch,
+    label: "OCR Review",
+    path: "/ocr-review",
+    roles: ["developer", "ministry_admin", "university_admin", "document_officer"],
   },
   {
     icon: Users,

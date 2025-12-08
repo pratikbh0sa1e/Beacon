@@ -31,6 +31,7 @@ import {
 // import { formatRelativeTime } from "../../utils/dateFormat"; // Ensure you have this utility or import it
 import { DOCUMENT_CATEGORIES } from "../../constants/categories";
 import { toast } from "sonner";
+import { OCRBadge } from "../../components/ocr";
 
 export const DocumentExplorerPage = () => {
   const navigate = useNavigate();
@@ -284,12 +285,12 @@ export const DocumentExplorerPage = () => {
                                 doc.approval_status === "approved"
                                   ? "bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200"
                                   : doc.approval_status === "pending"
-                                  ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
-                                  : doc.approval_status === "rejected"
-                                  ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
-                                  : doc.approval_status === "draft"
-                                  ? "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
-                                  : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                                    ? "bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200"
+                                    : doc.approval_status === "rejected"
+                                      ? "bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200"
+                                      : doc.approval_status === "draft"
+                                        ? "bg-gray-100 text-gray-800 dark:bg-gray-900 dark:text-gray-200"
+                                        : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
                               }
                             >
                               {doc.approval_status
@@ -298,6 +299,8 @@ export const DocumentExplorerPage = () => {
                             </Badge>
                           )}
                         </div>
+                        {/* OCR Badge */}
+                        <OCRBadge document={doc} />
                         <div className="flex gap-2">
                           <Badge
                             variant={
@@ -311,17 +314,15 @@ export const DocumentExplorerPage = () => {
                           <Button
                             variant="ghost"
                             size="icon"
-                            className={`h-6 w-6 ${
-                              isBookmarked
-                                ? "text-yellow-500 hover:text-yellow-600 hover:bg-yellow-500/10"
-                                : "text-muted-foreground"
-                            }`}
+                            className={`h-6 w-6 ${isBookmarked
+                              ? "text-yellow-500 hover:text-yellow-600 hover:bg-yellow-500/10"
+                              : "text-muted-foreground"
+                              }`}
                             onClick={(e) => toggleBookmark(e, doc.id)}
                           >
                             <Star
-                              className={`h-4 w-4 ${
-                                isBookmarked ? "fill-current" : ""
-                              }`}
+                              className={`h-4 w-4 ${isBookmarked ? "fill-current" : ""
+                                }`}
                             />
                           </Button>
                         </div>

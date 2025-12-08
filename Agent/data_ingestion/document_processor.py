@@ -124,11 +124,25 @@ class ExternalDocumentProcessor:
             with open(temp_path, "wb") as f:
                 f.write(file_data)
             
-            # Extract text using existing utility
-            extracted_text = extract_text(temp_path, file_ext)
+            # Extract text with OCR support for scanned documents
+            from backend.utils.text_extractor import extract_text_enhanced
+            extraction_result = extract_text_enhanced(temp_path, file_ext, use_ocr=True)
+            extracted_text = extraction_result['text']
+            is_scanned = extraction_result['is_scanned']
+            ocr_metadata = extraction_result.get('ocr_metadata')
             
             # Upload to Supabase
             s3_url = upload_to_supabase(temp_path, temp_filename)
+            
+            # Determine OCR status
+            ocr_status = None
+            ocr_confidence = None
+            if is_scanned and ocr_metadata:
+                if ocr_metadata.get('needs_review', False):
+                    ocr_status = 'needs_review'
+                else:
+                    ocr_status = 'completed'
+                ocr_confidence = ocr_metadata.get('confidence')
             
             # Save to database
             db = SessionLocal()
@@ -142,11 +156,69 @@ class ExternalDocumentProcessor:
                     doc_metadata=str({
                         "source": source_name,
                         "external_metadata": metadata or {}
-                    })
+                    }),
+                    is_scanned=is_scanned,
+                    ocr_status=ocr_status,
+                    ocr_confidence=ocr_confidence,
+                    visibility_level="public",  # Default for external sources
+                    approval_status="approved"  # Auto-approve external sources
                 )
                 db.add(doc)
                 db.commit()
                 db.refresh(doc)
+                
+                # Save OCR results if document was scanned
+                if is_scanned and ocr_metadata:
+                    from backend.database import OCRResult
+                    import numpy as np
+                    
+                    # Helper function to convert numpy types
+                    def convert_numpy_types(obj):
+                        if isinstance(obj, np.integer):
+                            return int(obj)
+                        elif isinstance(obj, np.floating):
+                            return float(obj)
+                        elif isinstance(obj, np.ndarray):
+                            return obj.tolist()
+                        elif isinstance(obj, dict):
+                            return {key: convert_numpy_types(value) for key, value in obj.items()}
+                        elif isinstance(obj, list):
+                            return [convert_numpy_types(item) for item in obj]
+                        return obj
+                    
+                    # Extract rotation and table info
+                    rotation_angle = ocr_metadata.get('rotation_corrected', 0)
+                    if rotation_angle == 0 and ocr_metadata.get('ocr_details'):
+                        rotation_corrections = ocr_metadata['ocr_details'].get('rotation_corrections', [])
+                        if rotation_corrections:
+                            rotation_angle = rotation_corrections[0].get('angle', 0)
+                    
+                    tables_data = ocr_metadata.get('tables', [])
+                    
+                    try:
+                        ocr_result = OCRResult(
+                            document_id=doc.id,
+                            engine_used='easyocr',
+                            confidence_score=float(ocr_metadata.get('confidence')) if ocr_metadata.get('confidence') is not None else None,
+                            extraction_time=float(ocr_metadata.get('extraction_time')) if ocr_metadata.get('extraction_time') is not None else None,
+                            language_detected=ocr_metadata.get('language_detected'),
+                            preprocessing_applied=convert_numpy_types(ocr_metadata.get('preprocessing_applied') or ocr_metadata.get('ocr_details', {}).get('preprocessing_applied')),
+                            raw_result=extracted_text,
+                            processed_result=extracted_text,
+                            needs_review=bool(ocr_metadata.get('needs_review', False)),
+                            quality_score=float(ocr_metadata.get('quality_score')) if ocr_metadata.get('quality_score') is not None else None,
+                            issues=convert_numpy_types(ocr_metadata.get('issues', [])),
+                            pages_with_ocr=convert_numpy_types(ocr_metadata.get('pages_with_ocr')),
+                            pages_with_text=convert_numpy_types(ocr_metadata.get('pages_with_text')),
+                            rotation_corrected=int(rotation_angle) if rotation_angle is not None else None,
+                            tables_extracted=convert_numpy_types(tables_data) if tables_data else None
+                        )
+                        db.add(ocr_result)
+                        db.commit()
+                        logger.info(f"OCR results saved for doc {doc.id}")
+                    except Exception as e:
+                        logger.error(f"Error saving OCR results for doc {doc.id}: {str(e)}")
+                        # Don't fail the whole process if OCR save fails
                 
                 # Extract metadata for lazy RAG
                 logger.info(f"Extracting metadata for doc {doc.id}: {filename}")
@@ -183,10 +255,20 @@ class ExternalDocumentProcessor:
                     "document_id": doc.id,
                     "s3_url": s3_url,
                     "text_length": len(extracted_text),
-                    "source": source_name
+                    "source": source_name,
+                    "is_scanned": is_scanned
                 }
                 
-                logger.info(f"Processed document {filename} from {source_name}")
+                # Add OCR info if document was scanned
+                if is_scanned and ocr_metadata:
+                    result["ocr_status"] = ocr_status
+                    result["ocr_confidence"] = ocr_confidence
+                    if ocr_metadata.get('needs_review'):
+                        result["needs_ocr_review"] = True
+                    if ocr_metadata.get('tables'):
+                        result["tables_found"] = len(ocr_metadata['tables'])
+                
+                logger.info(f"Processed document {filename} from {source_name} (scanned: {is_scanned})")
                 return result
                 
             finally:

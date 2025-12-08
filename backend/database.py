@@ -1,4 +1,4 @@
-from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean, JSON, Index
+from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, Date, ForeignKey, ARRAY, Boolean, JSON, Index, Float
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import JSONB
@@ -138,6 +138,11 @@ class Document(Base):
     version = Column(String(50), default="1.0")
     # ✅ FIXED: Renamed from 'metadata' to 'additional_metadata' to avoid SQLAlchemy conflict
     additional_metadata = Column(Text, nullable=True)
+    
+    # OCR-related fields
+    is_scanned = Column(Boolean, default=False, nullable=False)
+    ocr_status = Column(String(20), nullable=True, index=True)  # pending, processing, completed, failed, needs_review
+    ocr_confidence = Column(Float, nullable=True)
     
     # Relationships
     doc_metadata_rel = relationship(
@@ -298,6 +303,56 @@ class SyncLog(Base):
     
     started_at = Column(DateTime, nullable=False, default=datetime.utcnow)
     completed_at = Column(DateTime, nullable=True)
+
+
+class OCRResult(Base):
+    """OCR extraction results and metadata"""
+    __tablename__ = "ocr_results"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # OCR engine and results
+    engine_used = Column(String(50), nullable=False, default='easyocr')
+    confidence_score = Column(Float, nullable=True, index=True)
+    extraction_time = Column(Float, nullable=True)
+    language_detected = Column(String(50), nullable=True)
+    
+    # Processing details
+    preprocessing_applied = Column(JSONB, nullable=True)
+    raw_result = Column(Text, nullable=True)
+    processed_result = Column(Text, nullable=True)
+    
+    # Quality metrics
+    needs_review = Column(Boolean, default=False, nullable=False, index=True)
+    quality_score = Column(Float, nullable=True)
+    issues = Column(JSONB, nullable=True)
+    
+    # Page-level details (for PDFs)
+    pages_with_ocr = Column(JSONB, nullable=True)
+    pages_with_text = Column(JSONB, nullable=True)
+    
+    # Rotation and table extraction
+    rotation_corrected = Column(Integer, nullable=True)  # Degrees rotated (0, 90, 180, 270)
+    tables_extracted = Column(JSONB, nullable=True)  # Extracted tables data
+    
+    # Review tracking
+    reviewed_by = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    reviewed_at = Column(DateTime, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    
+    # Relationships
+    document = relationship("Document", foreign_keys=[document_id])
+    reviewer = relationship("User", foreign_keys=[reviewed_by])
+    
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_ocr_document_id', 'document_id'),
+        Index('idx_ocr_needs_review', 'needs_review'),
+        Index('idx_ocr_confidence', 'confidence_score'),
+    )
 
 
 class AuditLog(Base):

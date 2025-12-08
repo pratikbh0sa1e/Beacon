@@ -55,6 +55,108 @@ def sanitize_filename(filename: str) -> str:
 
 
 
+def process_ocr_background(document_id: int, file_path: str, file_ext: str, db_session):
+    """
+    Background task: Process OCR for scanned documents
+    This runs asynchronously so upload returns immediately
+    """
+    import numpy as np
+    
+    try:
+        print(f"Starting OCR processing for doc {document_id}...")
+        
+        # Helper function to convert numpy types to Python types
+        def convert_numpy_types(obj):
+            """Recursively convert numpy types to Python types for JSON serialization"""
+            if isinstance(obj, np.integer):
+                return int(obj)
+            elif isinstance(obj, np.floating):
+                return float(obj)
+            elif isinstance(obj, np.ndarray):
+                return obj.tolist()
+            elif isinstance(obj, dict):
+                return {key: convert_numpy_types(value) for key, value in obj.items()}
+            elif isinstance(obj, list):
+                return [convert_numpy_types(item) for item in obj]
+            return obj
+        
+        # Run OCR extraction
+        from backend.utils.text_extractor import extract_text_enhanced
+        extraction_result = extract_text_enhanced(file_path, file_ext, use_ocr=True)
+        extracted_text = extraction_result['text']
+        ocr_metadata = extraction_result['ocr_metadata']
+        
+        if not ocr_metadata:
+            print(f"No OCR metadata for doc {document_id}")
+            return
+        
+        # Update document with extracted text
+        doc = db_session.query(Document).filter(Document.id == document_id).first()
+        if not doc:
+            print(f"Document {document_id} not found")
+            return
+        
+        doc.extracted_text = extracted_text
+        
+        # Update OCR status
+        if ocr_metadata.get('needs_review', False):
+            doc.ocr_status = 'needs_review'
+        else:
+            doc.ocr_status = 'completed'
+        
+        doc.ocr_confidence = float(ocr_metadata.get('confidence')) if ocr_metadata.get('confidence') is not None else None
+        
+        # Save OCR results
+        from backend.database import OCRResult
+        
+        # Extract rotation and table info
+        rotation_angle = ocr_metadata.get('rotation_corrected', 0)
+        if rotation_angle == 0 and ocr_metadata.get('ocr_details'):
+            rotation_corrections = ocr_metadata['ocr_details'].get('rotation_corrections', [])
+            if rotation_corrections:
+                rotation_angle = rotation_corrections[0].get('angle', 0)
+        
+        tables_data = ocr_metadata.get('tables', [])
+        
+        # Convert all numpy types to Python types
+        ocr_result = OCRResult(
+            document_id=document_id,
+            engine_used='easyocr',
+            confidence_score=float(ocr_metadata.get('confidence')) if ocr_metadata.get('confidence') is not None else None,
+            extraction_time=float(ocr_metadata.get('extraction_time')) if ocr_metadata.get('extraction_time') is not None else None,
+            language_detected=ocr_metadata.get('language_detected'),
+            preprocessing_applied=convert_numpy_types(ocr_metadata.get('preprocessing_applied') or ocr_metadata.get('ocr_details', {}).get('preprocessing_applied')),
+            raw_result=extracted_text,
+            processed_result=extracted_text,
+            needs_review=bool(ocr_metadata.get('needs_review', False)),
+            quality_score=float(ocr_metadata.get('quality_score')) if ocr_metadata.get('quality_score') is not None else None,
+            issues=convert_numpy_types(ocr_metadata.get('issues', [])),
+            pages_with_ocr=convert_numpy_types(ocr_metadata.get('pages_with_ocr')),
+            pages_with_text=convert_numpy_types(ocr_metadata.get('pages_with_text')),
+            rotation_corrected=int(rotation_angle) if rotation_angle is not None else None,
+            tables_extracted=convert_numpy_types(tables_data) if tables_data else None
+        )
+        db_session.add(ocr_result)
+        db_session.commit()
+        
+        print(f"OCR processing completed for doc {document_id}")
+        
+    except Exception as e:
+        print(f"Error in OCR processing for doc {document_id}: {str(e)}")
+        db_session.rollback()
+        
+        # Update document status to failed
+        try:
+            doc = db_session.query(Document).filter(Document.id == document_id).first()
+            if doc:
+                doc.ocr_status = 'failed'
+                db_session.commit()
+        except:
+            pass
+    finally:
+        db_session.close()
+
+
 def extract_metadata_background(document_id: int, text: str, filename: str, db_session):
     """
     Background task: SMART FILL Logic.
@@ -109,6 +211,8 @@ def extract_metadata_background(document_id: int, text: str, filename: str, db_s
     except Exception as e:
         print(f"Error in background extraction for doc {document_id}: {str(e)}")
         db_session.rollback()
+    finally:
+        db_session.close()
 
 
 @router.post("/upload")
@@ -144,9 +248,14 @@ async def upload_documents(
         with open(file_path, "wb") as buffer:
             shutil.copyfileobj(file.file, buffer)
         
-        # 3. Extract text & Upload
-        extracted_text = extract_text(file_path, file_ext)
+        # 3. Upload to Supabase first (fast)
         s3_url = upload_to_supabase(file_path, unique_filename)
+        
+        # 3b. Quick text extraction (without OCR for now - will be done in background)
+        from backend.utils.text_extractor import extract_text_enhanced
+        extraction_result = extract_text_enhanced(file_path, file_ext, use_ocr=False)
+        extracted_text = extraction_result['text']
+        is_scanned = extraction_result['is_scanned']
         
         # 4. Handle Institution
         final_inst_id = current_user.institution_id
@@ -158,12 +267,15 @@ async def upload_documents(
         # MoE Admin and Developer don't need approval - their uploads are auto-approved
         initial_status = "approved" if current_user.role in ["ministry_admin", "developer"] else "draft"
         
+        # Set OCR status to 'processing' if document is scanned
+        ocr_status = 'processing' if is_scanned else None
+        
         doc = Document(
             filename=file.filename,
             file_type=file_ext,
             file_path=file_path,
             s3_url=s3_url,
-            extracted_text=extracted_text,
+            extracted_text=extracted_text if extracted_text else "",  # Empty for scanned docs initially
             uploader_id=current_user.id,
             institution_id=final_inst_id,
             visibility_level=visibility or "public",
@@ -172,7 +284,10 @@ async def upload_documents(
             version=version,
             user_description=description,
             approved_by=current_user.id if current_user.role in ["ministry_admin", "developer"] else None,
-            approved_at=datetime.utcnow() if current_user.role in ["ministry_admin", "developer"] else None
+            approved_at=datetime.utcnow() if current_user.role in ["ministry_admin", "developer"] else None,
+            is_scanned=is_scanned,
+            ocr_status=ocr_status,
+            ocr_confidence=None  # Will be set after OCR completes
         )
         db.add(doc)
         db.commit()
@@ -197,6 +312,12 @@ async def upload_documents(
         )
         db.add(doc_metadata)
         db.commit()
+        
+        # 6b. Schedule OCR processing in background if document is scanned
+        if is_scanned and background_tasks:
+            from backend.database import SessionLocal
+            bg_db_ocr = SessionLocal()
+            background_tasks.add_task(process_ocr_background, doc.id, file_path, file_ext, bg_db_ocr)
 
         # 7. Background Task: Extract metadata (which will then trigger embedding)
         if background_tasks:
@@ -205,14 +326,22 @@ async def upload_documents(
             background_tasks.add_task(extract_metadata_background, doc.id, extracted_text, file.filename, bg_db)
         
         # ✅ SUCCESS: Append structured result
-        results.append({
+        result_data = {
             "filename": file.filename,
             "status": "success",
             "document_id": doc.id,
             "metadata_status": "processing",
             # Determine source: if user typed something, it's user provided. Else AI.
             "metadata_source": "user_provided" if (title or description) else "ai_extraction"
-        })
+        }
+        
+        # Add OCR information if document was scanned
+        if is_scanned:
+            result_data["is_scanned"] = True
+            result_data["ocr_status"] = "processing"  # OCR is running in background
+            result_data["ocr_message"] = "OCR processing started in background. Results will be available shortly."
+        
+        results.append(result_data)
         
     except Exception as e:
         # ✅ ERROR: Append error details for debugging

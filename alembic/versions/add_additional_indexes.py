@@ -18,56 +18,75 @@ depends_on = None
 
 def upgrade():
     """Add additional performance indexes"""
+    from sqlalchemy import inspect
+    
+    conn = op.get_bind()
+    inspector = inspect(conn)
+    
+    # Helper function to check if index exists
+    def index_exists(table_name, index_name):
+        indexes = inspector.get_indexes(table_name)
+        return any(idx['name'] == index_name for idx in indexes)
     
     # Notifications table indexes
-    op.create_index(
-        'idx_notifications_user_read',
-        'notifications',
-        ['user_id', 'read'],
-        unique=False
-    )
-    op.create_index(
-        'idx_notifications_created',
-        'notifications',
-        ['created_at'],
-        unique=False
-    )
-    op.create_index(
-        'idx_notifications_user_type',
-        'notifications',
-        ['user_id', 'type'],
-        unique=False
-    )
+    if not index_exists('notifications', 'idx_notifications_user_read'):
+        op.create_index(
+            'idx_notifications_user_read',
+            'notifications',
+            ['user_id', 'read'],
+            unique=False
+        )
+    
+    if not index_exists('notifications', 'idx_notifications_created'):
+        op.create_index(
+            'idx_notifications_created',
+            'notifications',
+            ['created_at'],
+            unique=False
+        )
+    
+    if not index_exists('notifications', 'idx_notifications_user_type'):
+        op.create_index(
+            'idx_notifications_user_type',
+            'notifications',
+            ['user_id', 'type'],
+            unique=False
+        )
     
     # Bookmarks table indexes
-    op.create_index(
-        'idx_bookmarks_user_created',
-        'bookmarks',
-        ['user_id', 'created_at'],
-        unique=False
-    )
+    if not index_exists('bookmarks', 'idx_bookmarks_user_created'):
+        op.create_index(
+            'idx_bookmarks_user_created',
+            'bookmarks',
+            ['user_id', 'created_at'],
+            unique=False
+        )
     
     # Chat messages table indexes
-    op.create_index(
-        'idx_chat_messages_session_created',
-        'chat_messages',
-        ['session_id', 'created_at'],
-        unique=False
-    )
+    if not index_exists('chat_messages', 'idx_chat_messages_session_created'):
+        op.create_index(
+            'idx_chat_messages_session_created',
+            'chat_messages',
+            ['session_id', 'created_at'],
+            unique=False
+        )
     
     # Document chat messages table indexes
-    op.create_index(
-        'idx_doc_chat_messages_doc_created',
-        'document_chat_messages',
-        ['document_id', 'created_at'],
-        unique=False
-    )
-    op.create_index(
-        'idx_doc_chat_messages_user',
-        'document_chat_messages',
-        ['user_id'],
-        unique=False
-    )
+    if not index_exists('document_chat_messages', 'idx_doc_chat_messages_doc_created'):
+        op.create_index(
+            'idx_doc_chat_messages_doc_created',
+            'document_chat_messages',
+            ['document_id', 'created_at'],
+            unique=False
+        )
+    
+    if not index_exists('document_chat_messages', 'idx_doc_chat_messages_user'):
+        op.create_index(
+            'idx_doc_chat_messages_user',
+            'document_chat_messages',
+            ['user_id'],
+            unique=False
+        )
     
     print("✅ Additional performance indexes created successfully!")
 

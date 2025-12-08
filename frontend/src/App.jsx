@@ -51,6 +51,9 @@ import { BookmarksPage } from "./pages/BookmarksPage";
 // Notes Page
 import { NotesPage } from "./pages/NotesPage";
 
+// OCR Page
+import OCRReviewPage from "./pages/OCRReviewPage";
+
 // User Pages
 import { ProfilePage } from "./pages/ProfilePage";
 import { SettingsPage } from "./pages/SettingsPage";
@@ -176,6 +179,21 @@ const App = () => {
                 ]}
               >
                 <ApprovalsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="ocr-review"
+            element={
+              <ProtectedRoute
+                allowedRoles={[
+                  "developer",
+                  "ministry_admin",
+                  "university_admin",
+                  "document_officer",
+                ]}
+              >
+                <OCRReviewPage />
               </ProtectedRoute>
             }
           />
