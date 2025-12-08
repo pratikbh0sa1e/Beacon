@@ -17,6 +17,7 @@ import {
   StickyNote,
   Database,
   HelpCircle,
+  Globe,
 } from "lucide-react";
 import { useAuthStore } from "../../stores/authStore";
 import { ADMIN_ROLES, DOCUMENT_MANAGER_ROLES } from "../../constants/roles";
@@ -60,6 +61,12 @@ const menuItems = [
     roles: ADMIN_ROLES,
   },
   {
+    icon: Globe,
+    label: "Web Scraping",
+    path: "/admin/web-scraping",
+    roles: ADMIN_ROLES,
+  },
+  {
     icon: Settings,
     label: "System Health",
     path: "/admin/system",
@@ -95,7 +102,7 @@ const getDataSourceMenuItems = (userRole) => {
     ];
   }
 
-  // Developer sees: Pending Approvals, Active Sources, All Requests
+  // Developer sees: Pending Approvals, Active Sources, All Requests, Web Scraping
   if (userRole === "developer") {
     return [
       {

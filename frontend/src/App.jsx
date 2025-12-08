@@ -43,6 +43,7 @@ import { DataSourceRequestPage } from "./pages/admin/DataSourceRequestPage";
 import { DataSourceApprovalPage } from "./pages/admin/DataSourceApprovalPage";
 import { ActiveSourcesPage } from "./pages/admin/ActiveSourcesPage";
 import { MyDataSourceRequestsPage } from "./pages/admin/MyDataSourceRequestsPage";
+import { WebScrapingPage } from "./pages/admin/WebScrapingPage";
 
 // Bookmark Page
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -244,6 +245,15 @@ const App = () => {
               element={
                 <ProtectedRoute allowedRoles={["developer"]}>
                   <DataSourceApprovalPage />
+                </ProtectedRoute>
+              }
+            />
+
+            <Route
+              path="web-scraping"
+              element={
+                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
+                  <WebScrapingPage />
                 </ProtectedRoute>
               }
             />
