@@ -110,8 +110,29 @@ class BGEEmbedder:
         logger.info("Using Google Gemini embeddings (cloud)")
         genai.configure(api_key=api_key)
         self.model = {"type": "gemini", "model_name": model_name}
-        self.dimension = 768  # Gemini embedding-001 dimension
+        # Gemini native dimension is 768, but we pad to 1024 for BGE-M3 compatibility
+        self.dimension = 1024  # Padded dimension for pgvector compatibility
         self.genai = genai
+        logger.info("Gemini embeddings will be padded from 768 to 1024 dimensions")
+    
+    def _pad_embedding(self, embedding: List[float], target_dim: int = 1024) -> List[float]:
+        """
+        Pad embedding to target dimension with zeros
+        
+        Args:
+            embedding: Original embedding
+            target_dim: Target dimension (default: 1024 for BGE-M3 compatibility)
+        
+        Returns:
+            Padded embedding
+        """
+        current_dim = len(embedding)
+        if current_dim >= target_dim:
+            return embedding
+        
+        # Pad with zeros
+        padding = [0.0] * (target_dim - current_dim)
+        return embedding + padding
     
     def embed_text(self, text: str) -> List[float]:
         """Generate embedding for a single text"""
@@ -123,7 +144,11 @@ class BGEEmbedder:
                 content=text,
                 task_type="retrieval_document"
             )
-            return result['embedding']
+            embedding = result['embedding']
+            # Pad Gemini embeddings (768) to 1024 for BGE-M3 compatibility
+            embedding = self._pad_embedding(embedding, target_dim=1024)
+            logger.debug(f"Padded Gemini embedding from 768 to {len(embedding)} dims")
+            return embedding
         else:
             embedding = self.model.encode(text, convert_to_numpy=True)
             return embedding.tolist()
@@ -141,14 +166,21 @@ class BGEEmbedder:
         if self.engine_type == "gemini":
             # Gemini doesn't have native batch support, process one by one
             embeddings = []
-            for text in texts:
+            for i, text in enumerate(texts):
                 result = self.genai.embed_content(
                     model=self.model["model_name"],
                     content=text,
                     task_type="retrieval_document"
                 )
-                embeddings.append(result['embedding'])
-            logger.info(f"Successfully generated {len(embeddings)} embeddings")
+                embedding = result['embedding']
+                # Pad Gemini embeddings (768) to 1024 for BGE-M3 compatibility
+                embedding = self._pad_embedding(embedding, target_dim=1024)
+                embeddings.append(embedding)
+                
+                if (i + 1) % 10 == 0:
+                    logger.debug(f"Embedded {i + 1}/{len(texts)} texts (padded to 1024 dims)")
+            
+            logger.info(f"Successfully generated {len(embeddings)} embeddings (padded to 1024 dims)")
             return embeddings
         else:
             embeddings = self.model.encode(

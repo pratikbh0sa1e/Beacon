@@ -34,7 +34,7 @@ export const LandingFooter = () => {
             <ul className="space-y-2 text-sm text-muted-foreground">
               <li>
                 <a
-                  href="http://localhost:8000/docs"
+                  href={`${import.meta.env.VITE_API_URL || "http://localhost:8000"}/docs`}
                   target="_blank"
                   rel="noopener noreferrer"
                   className="hover:text-primary transition-colors"

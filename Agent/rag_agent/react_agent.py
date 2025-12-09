@@ -1,6 +1,6 @@
 """ReAct agent with LangGraph for policy Q&A"""
 import logging
-from typing import TypedDict, Annotated, Sequence, AsyncGenerator
+from typing import TypedDict, Annotated, Sequence, AsyncGenerator, List
 from pathlib import Path
 import operator
 import time
@@ -9,10 +9,12 @@ import asyncio
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
-from langchain.tools import Tool
-from langchain.agents import AgentExecutor, create_react_agent
-from langchain import hub
+from langchain.tools import Tool, StructuredTool
+from langchain.agents import AgentExecutor, create_tool_calling_agent
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.callbacks.base import BaseCallbackHandler
+from pydantic import BaseModel, Field
+from typing import Optional
 
 from Agent.tools.lazy_search_tools import (
     search_documents_lazy,
@@ -20,6 +22,10 @@ from Agent.tools.lazy_search_tools import (
 )
 from Agent.tools.search_tools import get_document_metadata
 from Agent.tools.analysis_tools import compare_policies, summarize_document
+from Agent.tools.count_tools import count_documents_wrapper
+from Agent.tools.list_tools import list_documents_wrapper
+from Agent.intent.classifier import classify_intent
+from Agent.formatting.response_formatter import format_response
 
 # Setup logging
 log_dir = Path("Agent/agent_logs")
@@ -64,7 +70,12 @@ class AgentState(TypedDict):
     """State for the agent"""
     messages: Annotated[Sequence[dict], operator.add]
     query: str
+    intent: str  # Query intent: "comparison" | "count" | "list" | "qa"
+    intent_confidence: float  # Classification confidence
+    extracted_params: dict  # Extracted parameters (language, type, etc.)
     response: str
+    format_type: str  # Response format type
+    structured_data: dict  # Format-specific structured data
     citations: list
     confidence: float
 
@@ -82,81 +93,164 @@ class PolicyRAGAgent:
         """
         logger.info("Initializing PolicyRAGAgent")
         
-        # Initialize Gemini Flash
+        # Initialize Gemini Flash with tool calling support
         self.llm = ChatGoogleGenerativeAI(
             model="gemini-2.0-flash",
             google_api_key=google_api_key,
             temperature=temperature,
-            streaming=True,
-            convert_system_message_to_human=True
+            streaming=False,  # Disable streaming for tool calling reliability
+            convert_system_message_to_human=False  # Keep system messages for better tool calling
         )
         
         # User context for role-based access (will be set per query)
         self.current_user_role = None
         self.current_user_institution_id = None
         
+        # Define input schemas for structured tools
+        class CountDocumentsInput(BaseModel):
+            language: Optional[str] = Field(None, description="Filter by language (e.g., 'Hindi', 'English')")
+            document_type: Optional[str] = Field(None, description="Filter by document type (e.g., 'Policy', 'Guideline')")
+            year_from: Optional[str] = Field(None, description="Filter by start year (e.g., '2018')")
+            year_to: Optional[str] = Field(None, description="Filter by end year (e.g., '2021')")
+        
+        class ListDocumentsInput(BaseModel):
+            language: Optional[str] = Field(None, description="Filter by language (e.g., 'Hindi', 'English')")
+            document_type: Optional[str] = Field(None, description="Filter by document type (e.g., 'Policy', 'Guideline')")
+            year_from: Optional[str] = Field(None, description="Filter by start year (e.g., '2018')")
+            year_to: Optional[str] = Field(None, description="Filter by end year (e.g., '2021')")
+            limit: Optional[int] = Field(10, description="Maximum number of documents to return (default: 10, max: 50)")
+        
+        class ComparePoliciesInput(BaseModel):
+            document_ids: List[int] = Field(..., description="List of document IDs to compare (e.g., [123, 124])")
+            aspect: str = Field(..., description="The aspect to compare (e.g., 'eligibility criteria', 'purpose', 'requirements')")
+        
+        class SummarizeDocumentInput(BaseModel):
+            document_id: int = Field(..., description="The document ID to summarize")
+            focus: str = Field("general", description="Focus area for summary (e.g., 'general', 'key points', 'requirements')")
+        
+        class SearchSpecificDocumentInput(BaseModel):
+            document_id: int = Field(..., description="The document ID to search within")
+            query: str = Field(..., description="The search query to find relevant content in the document")
+        
         # Define tools (using lazy search with role-based access)
         self.tools = [
-            Tool(
-                name="search_documents",
+            StructuredTool.from_function(
                 func=self._search_documents_wrapper,
+                name="search_documents",
                 description=(
-                    "Search across ALL documents to find information. Use this as your PRIMARY and FIRST tool for ANY question. "
-                    "Input: just the search query as a string (e.g., 'Pranav Waikar' or 'admission policy'). "
-                    "Returns: Top 5 relevant results with document IDs, sources, and approval status. "
-                    "IMPORTANT: This tool usually provides enough information to answer the question - check results carefully before using other tools."
+                    "Search across ALL documents to find information by content using vector similarity. "
+                    "Input: search query as a plain string like 'eligibility criteria' or 'scholarship policy'. "
+                    "Returns: Top 5 relevant results with document IDs. "
+                    "IMPORTANT: If this returns no results or irrelevant results, you MUST immediately try list_documents "
+                    "to browse by title/type as a fallback. Never stop after just one failed search."
                 )
             ),
-            Tool(
+            StructuredTool.from_function(
+                func=self._search_specific_document_structured,
                 name="search_specific_document",
-                func=self._search_specific_document_wrapper,
                 description=(
-                    "Search WITHIN a specific document when you already know the document ID from a previous search. "
-                    "Input: {'document_id': int, 'query': str} "
-                    "Only use this if search_documents found a relevant document but you need MORE details from that specific document."
-                )
+                    "Search WITHIN a specific document to extract relevant content. Use this when: "
+                    "1) You have a document ID from list_documents and need to answer questions about its content, "
+                    "2) search_documents found a document but you need MORE specific details, "
+                    "3) User asks about a specific document's content. "
+                    "This tool will automatically embed the document if needed and return relevant chunks."
+                ),
+                args_schema=SearchSpecificDocumentInput
             ),
-            Tool(
+            StructuredTool.from_function(
+                func=self._count_documents_structured,
+                name="count_documents",
+                description="Count documents matching specific criteria. Use when user asks 'how many' or 'count' documents.",
+                args_schema=CountDocumentsInput
+            ),
+            StructuredTool.from_function(
+                func=self._list_documents_structured,
+                name="list_documents",
+                description=(
+                    "List documents matching specific criteria by browsing database directly. "
+                    "Use when: 1) User asks to 'show', 'list', or 'fetch' documents, "
+                    "2) search_documents returns no results (FALLBACK), "
+                    "3) You need to find documents by title keywords or type. "
+                    "This is more reliable than search_documents for finding documents by metadata."
+                ),
+                args_schema=ListDocumentsInput
+            ),
+            StructuredTool.from_function(
+                func=self._compare_policies_structured,
                 name="compare_policies",
-                func=lambda args: compare_policies(**eval(args)),
                 description=(
                     "Compare TWO OR MORE documents on a specific aspect. "
-                    "Input: {'document_ids': [int, int], 'aspect': str} "
-                    "Only use when user explicitly asks to COMPARE multiple documents."
-                )
+                    "IMPORTANT: You MUST have document IDs before using this tool. "
+                    "If user asks to compare documents by topic (e.g., 'compare scholarship documents'), "
+                    "you MUST first use 'search_documents' or 'list_documents' to find the document IDs, "
+                    "then use this tool with those IDs. "
+                    "Example workflow: 1) search_documents('scholarship') to get IDs, 2) compare_policies with those IDs."
+                ),
+                args_schema=ComparePoliciesInput
             ),
-            Tool(
+            StructuredTool.from_function(
+                func=self._get_document_metadata_wrapper,
                 name="get_document_metadata",
-                func=lambda args="": get_document_metadata() if not args or str(args).strip() in ["{}", "", "None"] else get_document_metadata(int(args)),
                 description=(
                     "Get a LIST of all available documents in the system. "
-                    "Input: leave empty or pass nothing. "
                     "Use this ONLY when user asks 'what documents do you have' or 'list all documents'. "
-                    "DO NOT use this for searching - use search_documents instead."
+                    "DO NOT use this for searching - use search_documents or list_documents instead."
                 )
             ),
-            Tool(
+            StructuredTool.from_function(
+                func=self._summarize_document_structured,
                 name="summarize_document",
-                func=lambda args: summarize_document(**eval(args)),
                 description=(
                     "Generate a SUMMARY of an entire document. "
-                    "Input: {'document_id': int, 'focus': str} "
                     "Only use when user explicitly asks for a summary or overview of a document."
-                )
+                ),
+                args_schema=SummarizeDocumentInput
             )
         ]
         
-        # Create ReAct agent
-        prompt = hub.pull("hwchase17/react")
-        self.agent = create_react_agent(self.llm, self.tools, prompt)
+        # Create tool-calling agent with simplified, action-oriented prompt
+        prompt = ChatPromptTemplate.from_messages([
+            ("system", """You are a proactive policy document assistant. You have tools to search, list, count, and compare documents.
+
+CRITICAL RULES:
+1. ALWAYS use your tools to answer questions - never ask the user if they want you to search
+2. If search_documents returns no results or irrelevant results, IMMEDIATELY use list_documents as fallback
+3. After finding documents with list_documents, use search_specific_document to get detailed content
+4. Try multiple search strategies automatically before giving up
+5. Present results directly - don't ask permission to search
+
+SEARCH STRATEGY:
+- For specific queries: try search_documents with the main keywords
+- If no results: try search_documents with alternative keywords
+- If still no results: use list_documents to browse by document type or title keywords
+- After list_documents finds documents: use search_specific_document to extract relevant content
+- Example: "scholarship guidelines" → search "scholarship" → if no results → list_documents → search_specific_document
+
+TOOL USAGE:
+- search_documents: For content-based search across all documents (first attempt)
+- list_documents: For browsing by title/type (fallback when search fails) - returns document IDs
+- search_specific_document: For extracting content from a specific document ID (use after list_documents)
+- count_documents: When user asks "how many"
+- compare_policies: After finding document IDs via search or list
+- summarize_document: For generating summaries of specific documents
+
+IMPORTANT: list_documents only shows metadata (title, type, etc.). To answer questions about document content,
+you MUST use search_specific_document with the document ID to retrieve the actual content.
+
+Be proactive and exhaustive in your search before concluding documents don't exist."""),
+            MessagesPlaceholder(variable_name="chat_history", optional=True),
+            ("human", "{input}"),
+            MessagesPlaceholder(variable_name="agent_scratchpad"),
+        ])
+        
+        self.agent = create_tool_calling_agent(self.llm, self.tools, prompt)
         self.agent_executor = AgentExecutor(
             agent=self.agent,
             tools=self.tools,
             verbose=True,
             handle_parsing_errors=True,
-            max_iterations=15,  # Increased from 5 to handle complex queries
-            max_execution_time=20,  # 20 second timeout for safety
-            return_intermediate_steps=True  # Enable intermediate steps for citations
+            max_execution_time=60,  # Increased timeout for embedding operations
+            return_intermediate_steps=True
         )
         
         # Setup LangGraph with memory
@@ -173,35 +267,134 @@ class PolicyRAGAgent:
             user_institution_id=self.current_user_institution_id
         )
     
-    def _search_specific_document_wrapper(self, args: str) -> str:
-        """Wrapper to inject user context into search_specific_document_lazy"""
-        parsed_args = eval(args)
+    def _get_document_metadata_wrapper(self) -> str:
+        """Wrapper for get_document_metadata - returns list of all documents"""
+        return get_document_metadata()
+    
+    def _search_specific_document_structured(
+        self,
+        document_id: int,
+        query: str
+    ) -> str:
+        """Structured wrapper for search_specific_document with proper argument handling"""
         return search_specific_document_lazy(
-            document_id=parsed_args['document_id'],
-            query=parsed_args['query'],
+            document_id=int(document_id),
+            query=query,
             user_role=self.current_user_role,
             user_institution_id=self.current_user_institution_id
         )
+    
+    def _count_documents_structured(
+        self,
+        language: Optional[str] = None,
+        document_type: Optional[str] = None,
+        year_from: Optional[str] = None,
+        year_to: Optional[str] = None
+    ) -> str:
+        """Structured wrapper for count_documents with proper argument handling"""
+        from Agent.tools.count_tools import count_documents
+        return count_documents(
+            language=language,
+            document_type=document_type,
+            year_from=year_from,
+            year_to=year_to,
+            user_role=self.current_user_role,
+            user_institution_id=self.current_user_institution_id
+        )
+    
+    def _list_documents_structured(
+        self,
+        language: Optional[str] = None,
+        document_type: Optional[str] = None,
+        year_from: Optional[str] = None,
+        year_to: Optional[str] = None,
+        limit: int = 10
+    ) -> str:
+        """Structured wrapper for list_documents with proper argument handling"""
+        from Agent.tools.list_tools import list_documents
+        return list_documents(
+            language=language,
+            document_type=document_type,
+            year_from=year_from,
+            year_to=year_to,
+            limit=limit,
+            user_role=self.current_user_role,
+            user_institution_id=self.current_user_institution_id
+        )
+    
+    def _compare_policies_structured(
+        self,
+        document_ids: list,
+        aspect: str
+    ) -> str:
+        """Structured wrapper for compare_policies with proper argument handling"""
+        # Convert float IDs to integers (LLM sometimes returns floats)
+        document_ids = [int(doc_id) for doc_id in document_ids]
+        return compare_policies(document_ids=document_ids, aspect=aspect)
+    
+    def _summarize_document_structured(
+        self,
+        document_id: int,
+        focus: str = "general"
+    ) -> str:
+        """Structured wrapper for summarize_document with proper argument handling"""
+        return summarize_document(document_id=int(document_id), focus=focus)
     
     def _create_graph(self) -> StateGraph:
         """Create the LangGraph workflow"""
         workflow = StateGraph(AgentState)
         
         # Add nodes
+        workflow.add_node("classify_intent", self._classify_intent)
         workflow.add_node("process_query", self._process_query)
+        workflow.add_node("format_response", self._format_response)
         workflow.add_node("generate_response", self._generate_response)
         
         # Add edges
-        workflow.set_entry_point("process_query")
-        workflow.add_edge("process_query", "generate_response")
+        workflow.set_entry_point("classify_intent")
+        workflow.add_edge("classify_intent", "process_query")
+        workflow.add_edge("process_query", "format_response")
+        workflow.add_edge("format_response", "generate_response")
         workflow.add_edge("generate_response", END)
         
         # Compile with memory
         return workflow.compile(checkpointer=self.memory)
     
+    def _classify_intent(self, state: AgentState) -> AgentState:
+        """Classify the intent of the user query"""
+        try:
+            logger.info(f"Classifying intent for query: {state['query'][:50]}...")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            logger.info(f"Classifying intent for query: [Unicode query - {len(state['query'])} chars]")
+        
+        try:
+            # Classify the query intent
+            result = classify_intent(state['query'])
+            
+            state['intent'] = result.intent
+            state['intent_confidence'] = result.confidence
+            state['extracted_params'] = result.extracted_params
+            
+            logger.info(f"Intent classified as '{result.intent}' with confidence {result.confidence:.2f}")
+            if result.extracted_params:
+                logger.info(f"Extracted parameters: {result.extracted_params}")
+            
+        except Exception as e:
+            logger.error(f"Error classifying intent: {str(e)}")
+            # Default to Q&A on error
+            state['intent'] = 'qa'
+            state['intent_confidence'] = 0.5
+            state['extracted_params'] = {}
+        
+        return state
+    
     def _process_query(self, state: AgentState) -> AgentState:
         """Process the user query using ReAct agent"""
-        logger.info(f"Processing query: {state['query']}")
+        # Safe Unicode logging
+        try:
+            logger.info(f"Processing query: {state['query']}")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            logger.info(f"Processing query: [Unicode query - {len(state['query'])} chars]")
         
         try:
             # Build context from previous messages for conversation continuity
@@ -279,6 +472,42 @@ class PolicyRAGAgent:
         
         return state
     
+    def _format_response(self, state: AgentState) -> AgentState:
+        """Format the response based on intent"""
+        logger.info(f"Formatting response for intent: {state.get('intent', 'qa')}")
+        
+        try:
+            # Get tool outputs from intermediate steps (if available)
+            tool_outputs = []
+            # Note: tool_outputs would need to be extracted from agent_executor results
+            # For now, we'll work with the response text
+            
+            # Format the response
+            formatted = format_response(
+                intent=state.get('intent', 'qa'),
+                response_text=state['response'],
+                tool_outputs=tool_outputs,
+                citations=state.get('citations', [])
+            )
+            
+            # Update state with formatted data
+            state['format_type'] = formatted['format']
+            state['structured_data'] = formatted.get('data')
+            
+            # Update response if formatter modified it
+            if formatted.get('answer'):
+                state['response'] = formatted['answer']
+            
+            logger.info(f"Response formatted as: {state['format_type']}")
+            
+        except Exception as e:
+            logger.error(f"Error in format_response node: {str(e)}")
+            # Fallback to text format on error
+            state['format_type'] = 'text'
+            state['structured_data'] = None
+        
+        return state
+    
     def _generate_response(self, state: AgentState) -> AgentState:
         """Format the final response with citations"""
         logger.info("Generating final response")
@@ -296,7 +525,7 @@ class PolicyRAGAgent:
         
         return state
     
-    def query(self, question: str, thread_id: str = "default", user_role: str = None, user_institution_id: int = None) -> dict:
+    def query(self, question: str, thread_id: str = None, user_role: str = None, user_institution_id: int = None) -> dict:
         """
         Query the agent with user context for role-based access
         
@@ -309,11 +538,21 @@ class PolicyRAGAgent:
         Returns:
             Response dict with answer, citations, and confidence
         """
-        logger.info(f"Query received: '{question}' (role={user_role}, institution={user_institution_id})")
+        # Safe Unicode logging
+        try:
+            logger.info(f"Query received: '{question}' (role={user_role}, institution={user_institution_id})")
+        except (UnicodeEncodeError, UnicodeDecodeError):
+            logger.info(f"Query received: [Unicode query - {len(question)} chars] (role={user_role}, institution={user_institution_id})")
         
         # Set user context for this query
         self.current_user_role = user_role
         self.current_user_institution_id = user_institution_id
+        
+        # Use unique thread_id per query to avoid Gemini function calling history issues
+        # TODO: Re-enable conversation memory once LangChain fixes Gemini function calling history
+        import uuid
+        if thread_id is None:
+            thread_id = str(uuid.uuid4())
         
         config = {"configurable": {"thread_id": thread_id}}
         
@@ -337,7 +576,12 @@ class PolicyRAGAgent:
                 new_state = {
                     "messages": current_state["messages"] + [{"role": "user", "content": question}],
                     "query": question,
+                    "intent": "",
+                    "intent_confidence": 0.0,
+                    "extracted_params": {},
                     "response": "",
+                    "format_type": "text",
+                    "structured_data": None,
                     "citations": [],
                     "confidence": 0.0
                 }
@@ -346,7 +590,12 @@ class PolicyRAGAgent:
                 new_state = {
                     "messages": [{"role": "user", "content": question}],
                     "query": question,
+                    "intent": "",
+                    "intent_confidence": 0.0,
+                    "extracted_params": {},
                     "response": "",
+                    "format_type": "text",
+                    "structured_data": None,
                     "citations": [],
                     "confidence": 0.0
                 }
@@ -355,6 +604,8 @@ class PolicyRAGAgent:
             
             return {
                 "answer": result["response"],
+                "format": result.get("format_type", "text"),
+                "data": result.get("structured_data"),
                 "citations": result["citations"],
                 "confidence": result["confidence"],
                 "status": "success"
@@ -424,6 +675,8 @@ class PolicyRAGAgent:
             yield {
                 "type": "metadata",
                 "confidence": confidence,
+                "format": result.get("format", "text"),
+                "data": result.get("data"),
                 "status": result.get("status", "success"),
                 "timestamp": time.time()
             }

@@ -9,22 +9,25 @@ from datetime import datetime
 import logging
 
 from Agent.web_scraping.web_source_manager import WebSourceManager
+from Agent.web_scraping.session_storage import SessionStorage
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/web-scraping", tags=["Web Scraping"])
 
-# Initialize web source manager
+# Initialize web source manager and session storage
 web_manager = WebSourceManager()
+session_storage = SessionStorage()
 
-# Temporary in-memory storage (until DB migration)
-TEMP_SOURCES: List[Dict] = []
-TEMP_LOGS: List[Dict] = []
-TEMP_SCRAPED_DOCS: List[Dict] = []
+# Load persisted data from disk
+TEMP_SOURCES: List[Dict] = session_storage.load_sources()
+TEMP_LOGS: List[Dict] = session_storage.load_logs()
+TEMP_SCRAPED_DOCS: List[Dict] = session_storage.load_scraped_docs()
 
-# Counter for IDs
-_source_id_counter = 1
-_log_id_counter = 1
+# Load counters from disk
+_counters = session_storage.load_counters()
+_source_id_counter = _counters.get("source_id", 1)
+_log_id_counter = _counters.get("log_id", 1)
 
 
 # ==================== Pydantic Models ====================
@@ -56,7 +59,10 @@ class ScrapeRequest(BaseModel):
     source_id: Optional[int] = None
     url: Optional[HttpUrl] = None
     keywords: Optional[List[str]] = None
-    max_documents: Optional[int] = 50
+    max_documents: Optional[int] = 1500
+    pagination_enabled: Optional[bool] = True
+    max_pages: Optional[int] = 100
+    incremental: Optional[bool] = False
 
 
 # ==================== Endpoints ====================
@@ -88,6 +94,10 @@ async def create_web_source(source: WebSourceCreate):
     
     TEMP_SOURCES.append(new_source)
     _source_id_counter += 1
+    
+    # Persist to disk
+    session_storage.save_sources(TEMP_SOURCES)
+    session_storage.save_counters(_source_id_counter, _log_id_counter)
     
     logger.info(f"Created web source: {source.name}")
     return new_source
@@ -132,6 +142,9 @@ async def update_web_source(source_id: int, source_update: WebSourceCreate):
     source['max_documents'] = source_update.max_documents or 50
     source['scraping_enabled'] = source_update.scraping_enabled
     
+    # Persist to disk
+    session_storage.save_sources(TEMP_SOURCES)
+    
     logger.info(f"Updated web source: {source['name']} (keywords: {source['keywords']})")
     return source
 
@@ -147,6 +160,10 @@ async def delete_web_source(source_id: int):
         raise HTTPException(status_code=404, detail="Source not found")
     
     TEMP_SOURCES = [s for s in TEMP_SOURCES if s['id'] != source_id]
+    
+    # Persist to disk
+    session_storage.save_sources(TEMP_SOURCES)
+    
     logger.info(f"Deleted web source: {source['name']}")
     
     return {"message": "Source deleted successfully"}
@@ -197,12 +214,29 @@ async def scrape_now(request: ScrapeRequest, background_tasks: BackgroundTasks):
         logger.info(f"Starting scrape: {name}")
         logger.info(f"Keywords being used: {keywords} (type: {type(keywords)})")
         logger.info(f"Max documents: {max_docs}")
-        result = web_manager.scrape_source(
-            url=url,
-            source_name=name,
-            keywords=keywords,
-            max_documents=max_docs
-        )
+        logger.info(f"Pagination enabled: {request.pagination_enabled}")
+        logger.info(f"Max pages: {request.max_pages}")
+        
+        # Use pagination-enabled scraping if source_id is provided
+        if request.source_id:
+            result = web_manager.scrape_source_with_pagination(
+                source_id=request.source_id,
+                url=url,
+                source_name=name,
+                keywords=keywords,
+                pagination_enabled=request.pagination_enabled if request.pagination_enabled is not None else True,
+                max_pages=request.max_pages or 100,
+                incremental=request.incremental or False,
+                max_documents=max_docs or 1500
+            )
+        else:
+            # Ad-hoc scraping without pagination
+            result = web_manager.scrape_source(
+                url=url,
+                source_name=name,
+                keywords=keywords,
+                max_documents=max_docs
+            )
         
         # Create log entry with filtering statistics
         log_entry = {
@@ -247,9 +281,19 @@ async def scrape_now(request: ScrapeRequest, background_tasks: BackgroundTasks):
                     "scraped_at": doc.get('found_at', datetime.utcnow().isoformat())
                 }
                 TEMP_SCRAPED_DOCS.append(scraped_doc)
-                logger.info(f"Stored document: {scraped_doc['title'][:50]}...")
+                # Safe logging for Unicode characters
+                try:
+                    logger.info(f"Stored document: {scraped_doc['title'][:50]}...")
+                except (UnicodeEncodeError, UnicodeDecodeError):
+                    logger.info(f"Stored document: [Unicode title - {len(scraped_doc['title'])} chars]")
             
             logger.info(f"Total scraped docs now: {len(TEMP_SCRAPED_DOCS)}")
+        
+        # Persist all changes to disk
+        session_storage.save_sources(TEMP_SOURCES)
+        session_storage.save_logs(TEMP_LOGS)
+        session_storage.save_scraped_docs(TEMP_SCRAPED_DOCS)
+        session_storage.save_counters(_source_id_counter, _log_id_counter)
         
         # Build response with filtering statistics
         response_message = f"Scraping completed: {result.get('documents_matched', result.get('documents_found', 0))} documents found"
@@ -671,3 +715,40 @@ async def get_working_demo_urls():
         ],
         "note": "These URLs have been tested and work reliably for demos"
     }
+
+
+# ==================== Session Management ====================
+
+@router.post("/clear-session")
+async def clear_session():
+    """
+    Clear all session data (call on logout)
+    """
+    global TEMP_SOURCES, TEMP_LOGS, TEMP_SCRAPED_DOCS, _source_id_counter, _log_id_counter
+    
+    # Clear in-memory data
+    TEMP_SOURCES.clear()
+    TEMP_LOGS.clear()
+    TEMP_SCRAPED_DOCS.clear()
+    _source_id_counter = 1
+    _log_id_counter = 1
+    
+    # Clear persisted data
+    session_storage.clear_all()
+    
+    logger.info("Session data cleared")
+    
+    return {
+        "message": "Session cleared successfully",
+        "sources_cleared": True,
+        "logs_cleared": True,
+        "documents_cleared": True
+    }
+
+
+@router.get("/session-stats")
+async def get_session_stats():
+    """
+    Get session storage statistics
+    """
+    return session_storage.get_stats()

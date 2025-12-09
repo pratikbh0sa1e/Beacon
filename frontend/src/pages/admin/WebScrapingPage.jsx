@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import {
   Globe,
@@ -7,6 +8,7 @@ import {
   Pause,
   Trash2,
   Eye,
+  Pencil,
   CheckCircle,
   XCircle,
   Clock,
@@ -16,7 +18,10 @@ import {
   FileText,
   Shield,
   Zap,
+  Settings,
+  Activity,
 } from "lucide-react";
+import ScrapingLogs from "../../components/ScrapingLogs.jsx";
 import { PageHeader } from "../../components/common/PageHeader";
 import { LoadingSpinner } from "../../components/common/LoadingSpinner";
 import {
@@ -41,8 +46,9 @@ import {
 } from "../../components/ui/dialog";
 import { toast } from "sonner";
 import axios from "axios";
+import api from "../../services/api";
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || "http://localhost:8000/api";
+const API_BASE_URL = `${import.meta.env.VITE_API_URL || "http://localhost:8000"}/api`;
 
 export const WebScrapingPage = () => {
   const [loading, setLoading] = useState(true);
@@ -57,6 +63,8 @@ export const WebScrapingPage = () => {
   const [scrapingInProgress, setScrapingInProgress] = useState({});
   const [searchKeyword, setSearchKeyword] = useState("");
   const [editingSource, setEditingSource] = useState(null);
+  const [selectedDocs, setSelectedDocs] = useState([]); // For AI analysis
+  const [analyzing, setAnalyzing] = useState(false); // Track analysis state
 
   // Form state
   const [newSource, setNewSource] = useState({
@@ -64,8 +72,15 @@ export const WebScrapingPage = () => {
     url: "",
     description: "",
     keywords: "",
-    max_documents: 50,
+    max_documents: 1500,
+    pagination_enabled: true,
+    max_pages: 100,
   });
+
+  // View state
+  const [activeView, setActiveView] = useState("sources"); // "sources" or "logs"
+  
+  const navigate = useNavigate();
 
   useEffect(() => {
     fetchData();
@@ -78,7 +93,7 @@ export const WebScrapingPage = () => {
         axios.get(`${API_BASE_URL}/web-scraping/sources`),
         axios.get(`${API_BASE_URL}/web-scraping/stats`),
         axios.get(`${API_BASE_URL}/web-scraping/logs?limit=10`),
-        axios.get(`${API_BASE_URL}/web-scraping/scraped-documents?limit=20`),
+        axios.get(`${API_BASE_URL}/web-scraping/scraped-documents?limit=1000`),
       ]);
 
       setSources(sourcesRes.data);
@@ -105,6 +120,8 @@ export const WebScrapingPage = () => {
         description: newSource.description,
         keywords: keywords,
         max_documents: parseInt(newSource.max_documents),
+        pagination_enabled: newSource.pagination_enabled,
+        max_pages: parseInt(newSource.max_pages),
         scraping_enabled: true,
       });
 
@@ -115,7 +132,9 @@ export const WebScrapingPage = () => {
         url: "",
         description: "",
         keywords: "",
-        max_documents: 50,
+        max_documents: 1500,
+        pagination_enabled: true,
+        max_pages: 100,
       });
       fetchData();
     } catch (error) {
@@ -144,11 +163,20 @@ export const WebScrapingPage = () => {
       setScrapingInProgress((prev) => ({ ...prev, [sourceId]: true }));
       toast.info("Scraping started...");
 
+      // Get source to check settings
+      const source = sources.find(s => s.id === sourceId);
+      
+      // Use the correct endpoint: POST /api/web-scraping/scrape with source_id in body
       const response = await axios.post(`${API_BASE_URL}/web-scraping/scrape`, {
         source_id: sourceId,
+        keywords: source?.keywords || null,
+        max_documents: source?.max_documents || 1500,
+        pagination_enabled: source?.pagination_enabled !== false, // Default to true
+        max_pages: source?.max_pages || 100,
+        incremental: false,
       });
 
-      toast.success(response.data.message);
+      toast.success(`Scraping complete: ${response.data.documents_processed || response.data.documents_found || 0} documents processed`);
       
       // Wait a moment then refresh to get new documents
       setTimeout(() => {
@@ -169,7 +197,9 @@ export const WebScrapingPage = () => {
       url: source.url,
       description: source.description || "",
       keywords: source.keywords ? source.keywords.join(", ") : "",
-      max_documents: source.max_documents,
+      max_documents: source.max_documents || 1500,
+      pagination_enabled: source.pagination_enabled !== false,
+      max_pages: source.max_pages || 100,
     });
     setIsEditDialogOpen(true);
   };
@@ -186,6 +216,8 @@ export const WebScrapingPage = () => {
         description: newSource.description,
         keywords: keywords,
         max_documents: parseInt(newSource.max_documents),
+        pagination_enabled: newSource.pagination_enabled,
+        max_pages: parseInt(newSource.max_pages),
         scraping_enabled: true,
       });
 
@@ -197,7 +229,9 @@ export const WebScrapingPage = () => {
         url: "",
         description: "",
         keywords: "",
-        max_documents: 50,
+        max_documents: 1500,
+        pagination_enabled: true,
+        max_pages: 100,
       });
       fetchData();
     } catch (error) {
@@ -237,6 +271,85 @@ export const WebScrapingPage = () => {
     } catch (error) {
       console.error("Error running demo:", error);
       toast.error(error.response?.data?.detail || "Demo failed");
+    }
+  };
+
+  // AI Analysis handlers
+  const handleToggleDocSelection = (doc) => {
+    setSelectedDocs(prev => {
+      const isSelected = prev.some(d => d.url === doc.url);
+      if (isSelected) {
+        return prev.filter(d => d.url !== doc.url);
+      } else {
+        return [...prev, doc];
+      }
+    });
+  };
+
+  const handleAnalyzeWithAI = async () => {
+    if (selectedDocs.length === 0) {
+      toast.error("Please select at least one document to analyze");
+      return;
+    }
+
+    try {
+      setAnalyzing(true);
+      
+      // Show progress toast with more details
+      const toastId = toast.loading(
+        `🔄 Processing ${selectedDocs.length} document${selectedDocs.length > 1 ? 's' : ''}...`,
+        { 
+          duration: Infinity,
+          description: 'Downloading, extracting text, and analyzing with AI'
+        }
+      );
+      
+      // Call backend to download, extract, and analyze (using authenticated api)
+      const response = await api.post(`/api/document-analysis/analyze`, {
+        document_urls: selectedDocs.map(d => d.url),
+        document_titles: selectedDocs.map(d => d.title),
+        analysis_type: "decision_support"
+      });
+      
+      const { analysis, documents_processed, total_chunks, ocr_used_count } = response.data;
+      
+      // Dismiss loading toast
+      toast.dismiss(toastId);
+      
+      // Store analysis result for AI chat with metadata
+      sessionStorage.setItem('analysisResult', JSON.stringify({
+        analysis,
+        documents: selectedDocs.map(d => d.title),
+        documents_processed,
+        total_chunks,
+        ocr_used_count,
+        timestamp: new Date().toISOString()
+      }));
+      
+      // Show detailed success message
+      const successMsg = ocr_used_count > 0 
+        ? `✅ Analysis Complete! Processed ${documents_processed} documents (OCR used on ${ocr_used_count})`
+        : `✅ Analysis Complete! Processed ${documents_processed} documents`;
+      
+      toast.success(successMsg, {
+        description: `${total_chunks} text chunks analyzed. Redirecting to AI Chat...`,
+        duration: 3000
+      });
+      
+      // Navigate after a brief delay to show the success message
+      setTimeout(() => {
+        navigate('/ai-chat');
+      }, 1000);
+      
+    } catch (error) {
+      console.error("Error analyzing documents:", error);
+      const errorDetail = error.response?.data?.detail || "Analysis failed. Please try again.";
+      toast.error("Analysis Failed", {
+        description: errorDetail,
+        duration: 5000
+      });
+    } finally {
+      setAnalyzing(false);
     }
   };
 
@@ -382,6 +495,30 @@ export const WebScrapingPage = () => {
         )}
       </div>
 
+      {/* View Toggle */}
+      <div className="flex gap-2 mb-6">
+        <Button
+          variant={activeView === "sources" ? "default" : "outline"}
+          onClick={() => setActiveView("sources")}
+        >
+          <Settings className="mr-2 h-4 w-4" />
+          Sources & Configuration
+        </Button>
+        <Button
+          variant={activeView === "logs" ? "default" : "outline"}
+          onClick={() => setActiveView("logs")}
+        >
+          <Activity className="mr-2 h-4 w-4" />
+          Scraping Logs
+        </Button>
+      </div>
+
+      {/* Show Logs View */}
+      {activeView === "logs" && <ScrapingLogs />}
+
+      {/* Show Sources View */}
+      {activeView === "sources" && (
+        <>
       {/* Action Buttons */}
       <div className="flex gap-4 mb-6">
         <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
@@ -461,7 +598,49 @@ export const WebScrapingPage = () => {
                     })
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Default: 1500 documents. Increase for larger scrapes.
+                </p>
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="pagination">Enable Pagination</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="pagination"
+                    type="checkbox"
+                    checked={newSource.pagination_enabled}
+                    onChange={(e) =>
+                      setNewSource({
+                        ...newSource,
+                        pagination_enabled: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">
+                    Automatically follow pagination links
+                  </span>
+                </div>
+              </div>
+              {newSource.pagination_enabled && (
+                <div className="grid gap-2">
+                  <Label htmlFor="max_pages">Max Pages to Scrape</Label>
+                  <Input
+                    id="max_pages"
+                    type="number"
+                    value={newSource.max_pages}
+                    onChange={(e) =>
+                      setNewSource({
+                        ...newSource,
+                        max_pages: e.target.value,
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Maximum number of pages to follow (default: 100)
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => setIsAddDialogOpen(false)}>
@@ -544,7 +723,49 @@ export const WebScrapingPage = () => {
                     })
                   }
                 />
+                <p className="text-xs text-muted-foreground">
+                  Default: 1500 documents. Increase for larger scrapes.
+                </p>
               </div>
+              <div className="grid gap-2">
+                <Label htmlFor="edit-pagination">Enable Pagination</Label>
+                <div className="flex items-center gap-2">
+                  <input
+                    id="edit-pagination"
+                    type="checkbox"
+                    checked={newSource.pagination_enabled}
+                    onChange={(e) =>
+                      setNewSource({
+                        ...newSource,
+                        pagination_enabled: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4"
+                  />
+                  <span className="text-sm">
+                    Automatically follow pagination links
+                  </span>
+                </div>
+              </div>
+              {newSource.pagination_enabled && (
+                <div className="grid gap-2">
+                  <Label htmlFor="edit-max_pages">Max Pages to Scrape</Label>
+                  <Input
+                    id="edit-max_pages"
+                    type="number"
+                    value={newSource.max_pages}
+                    onChange={(e) =>
+                      setNewSource({
+                        ...newSource,
+                        max_pages: e.target.value,
+                      })
+                    }
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    Maximum number of pages to follow (default: 100)
+                  </p>
+                </div>
+              )}
             </div>
             <DialogFooter>
               <Button variant="outline" onClick={() => {
@@ -555,7 +776,9 @@ export const WebScrapingPage = () => {
                   url: "",
                   description: "",
                   keywords: "",
-                  max_documents: 50,
+                  max_documents: 1500,
+                  pagination_enabled: true,
+                  max_pages: 100,
                 });
               }}>
                 Cancel
@@ -676,7 +899,7 @@ export const WebScrapingPage = () => {
                         variant="outline"
                         onClick={() => handleEditSource(source)}
                       >
-                        <Eye className="h-4 w-4" />
+                        <Pencil className="h-4 w-4" />
                       </Button>
                       <Button
                         size="sm"
@@ -769,6 +992,34 @@ export const WebScrapingPage = () => {
           <CardContent>
             {scrapedDocs.length > 0 && (
               <div className="mb-4 space-y-2">
+                {selectedDocs.length > 0 && (
+                  <div className="flex items-center gap-2 mb-2">
+                    <Button 
+                      onClick={handleAnalyzeWithAI}
+                      className="gap-2"
+                      disabled={analyzing}
+                    >
+                      {analyzing ? (
+                        <>
+                          <LoadingSpinner className="h-4 w-4" />
+                          Analyzing...
+                        </>
+                      ) : (
+                        <>
+                          <Zap className="h-4 w-4" />
+                          Analyze {selectedDocs.length} Document{selectedDocs.length > 1 ? 's' : ''} with AI
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => setSelectedDocs([])}
+                      disabled={analyzing}
+                    >
+                      Clear Selection
+                    </Button>
+                  </div>
+                )}
                 <Input
                   placeholder="Search documents by keyword (title, source, type)..."
                   value={searchKeyword}
@@ -810,6 +1061,12 @@ export const WebScrapingPage = () => {
                     key={idx}
                     className="flex items-start gap-3 border-b pb-3 last:border-0"
                   >
+                    <input
+                      type="checkbox"
+                      checked={selectedDocs.some(d => d.url === doc.url)}
+                      onChange={() => handleToggleDocSelection(doc)}
+                      className="mt-1 h-4 w-4 cursor-pointer"
+                    />
                     <FileText className="h-5 w-5 text-muted-foreground mt-0.5" />
                     <div className="flex-1 min-w-0">
                       <p className="font-medium text-sm truncate">{doc.title}</p>
@@ -947,6 +1204,8 @@ export const WebScrapingPage = () => {
           </DialogFooter>
         </DialogContent>
       </Dialog>
+        </>
+      )}
     </div>
   );
 };

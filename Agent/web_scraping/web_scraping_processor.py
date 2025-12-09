@@ -100,6 +100,227 @@ class WebScrapingProcessor:
             'scraped_at': scrape_result['scraped_at']
         }
     
+    def scrape_and_process_source(self,
+                                  source_id: int,
+                                  db_session,
+                                  max_documents: Optional[int] = None,
+                                  pagination_enabled: bool = True,
+                                  max_pages: int = 100) -> Dict[str, Any]:
+        """
+        Scrape and process a source from database with pagination support
+        
+        Args:
+            source_id: Database source ID
+            db_session: Database session
+            max_documents: Maximum documents to scrape (uses config default if None)
+            pagination_enabled: Whether to use pagination
+            max_pages: Maximum pages to scrape
+        
+        Returns:
+            Processing result with statistics
+        """
+        from backend.database import WebScrapingSource, WebScrapingLog, ScrapedDocument
+        from Agent.web_scraping.config import ScrapingConfig
+        
+        # Get source from database
+        source = db_session.query(WebScrapingSource).filter(
+            WebScrapingSource.id == source_id
+        ).first()
+        
+        if not source:
+            return {
+                'status': 'error',
+                'error': f'Source {source_id} not found'
+            }
+        
+        # Use config default if not specified
+        if max_documents is None:
+            max_documents = ScrapingConfig.get_max_documents()
+        
+        logger.info(f"Starting scrape and process for source {source.name} (ID: {source_id})")
+        logger.info(f"Pagination: {pagination_enabled}, Max pages: {max_pages}, Max documents: {max_documents}")
+        
+        start_time = datetime.utcnow()
+        
+        # Create scraping log
+        log = WebScrapingLog(
+            source_id=source_id,
+            status='running',
+            started_at=start_time
+        )
+        db_session.add(log)
+        db_session.commit()
+        
+        try:
+            # Step 1: Scrape with pagination support
+            scrape_result = self.web_manager.scrape_source_with_pagination(
+                source_id=source_id,
+                url=source.url,
+                source_name=source.name,
+                keywords=source.keywords,
+                pagination_enabled=pagination_enabled,
+                max_pages=max_pages,
+                incremental=False,  # Don't use incremental for now
+                max_documents=max_documents
+            )
+            
+            if scrape_result['status'] != 'success':
+                # Update log with error
+                log.status = 'failed'
+                log.completed_at = datetime.utcnow()
+                log.error_message = scrape_result.get('error', 'Unknown error')
+                db_session.commit()
+                
+                # Update source
+                source.last_scraped_at = datetime.utcnow()
+                source.last_scrape_status = 'failed'
+                source.last_scrape_message = scrape_result.get('error', 'Unknown error')
+                db_session.commit()
+                
+                return scrape_result
+            
+            documents = scrape_result.get('documents', [])
+            logger.info(f"Scraped {len(documents)} documents from {source.name}")
+            
+            # Step 2: Download and process each document
+            processed_docs = []
+            failed_docs = []
+            
+            for doc in documents:
+                try:
+                    # Download document
+                    download_result = self.web_manager.downloader.download_document(doc['url'])
+                    
+                    if download_result['status'] != 'success':
+                        failed_docs.append({
+                            'url': doc['url'],
+                            'error': download_result.get('error')
+                        })
+                        continue
+                    
+                    # Add download info to doc
+                    doc['download'] = download_result
+                    
+                    # Process through pipeline
+                    result = self._process_single_document(
+                        doc=doc,
+                        source_name=source.name,
+                        uploader_id=source.created_by_user_id or 1,
+                        institution_id=source.institution_id
+                    )
+                    
+                    if result['status'] == 'success':
+                        processed_docs.append(result)
+                        
+                        # Update scraped document with source_id
+                        scraped_doc = db_session.query(ScrapedDocument).filter(
+                            ScrapedDocument.document_id == result['document_id']
+                        ).first()
+                        if scraped_doc:
+                            scraped_doc.source_id = source_id
+                            db_session.commit()
+                    else:
+                        failed_docs.append(result)
+                
+                except Exception as e:
+                    logger.error(f"Error processing document {doc.get('text', 'unknown')}: {str(e)}")
+                    failed_docs.append({
+                        'url': doc.get('url'),
+                        'error': str(e)
+                    })
+            
+            end_time = datetime.utcnow()
+            duration = (end_time - start_time).total_seconds()
+            
+            # Update log
+            log.status = 'completed'
+            log.completed_at = end_time
+            log.documents_found = len(documents)
+            log.documents_processed = len(processed_docs)
+            log.documents_failed = len(failed_docs)
+            log.execution_time_seconds = int(duration)
+            db_session.commit()
+            
+            # Update source
+            source.last_scraped_at = end_time
+            source.last_scrape_status = 'success'
+            source.last_scrape_message = f"Processed {len(processed_docs)} documents"
+            source.total_documents_scraped = (source.total_documents_scraped or 0) + len(processed_docs)
+            db_session.commit()
+            
+            logger.info(f"Completed scraping {source.name}: {len(processed_docs)} processed, {len(failed_docs)} failed")
+            
+            return {
+                'status': 'success',
+                'source_id': source_id,
+                'source_name': source.name,
+                'documents_found': len(documents),
+                'documents_processed': len(processed_docs),
+                'documents_failed': len(failed_docs),
+                'execution_time_seconds': int(duration),
+                'processed_documents': processed_docs,
+                'failed_documents': failed_docs
+            }
+        
+        except Exception as e:
+            logger.error(f"Error in scrape_and_process_source: {str(e)}", exc_info=True)
+            
+            # Update log with error
+            log.status = 'failed'
+            log.completed_at = datetime.utcnow()
+            log.error_message = str(e)
+            db_session.commit()
+            
+            # Update source
+            source.last_scraped_at = datetime.utcnow()
+            source.last_scrape_status = 'failed'
+            source.last_scrape_message = str(e)
+            db_session.commit()
+            
+            return {
+                'status': 'error',
+                'source_id': source_id,
+                'error': str(e)
+            }
+    
+    def scrape_all_enabled_sources(self, db_session) -> Dict[str, Any]:
+        """
+        Scrape all enabled sources
+        
+        Args:
+            db_session: Database session
+        
+        Returns:
+            Aggregated results
+        """
+        from backend.database import WebScrapingSource
+        
+        sources = db_session.query(WebScrapingSource).filter(
+            WebScrapingSource.scraping_enabled == True
+        ).all()
+        
+        logger.info(f"Scraping {len(sources)} enabled sources")
+        
+        results = []
+        for source in sources:
+            result = self.scrape_and_process_source(
+                source_id=source.id,
+                db_session=db_session
+            )
+            results.append(result)
+        
+        successful = sum(1 for r in results if r.get('status') == 'success')
+        total_processed = sum(r.get('documents_processed', 0) for r in results)
+        
+        return {
+            'status': 'success',
+            'total_sources': len(sources),
+            'successful': successful,
+            'failed': len(sources) - successful,
+            'total_documents_processed': total_processed,
+            'results': results
+        }
+    
     def _process_single_document(self,
                                 doc: Dict[str, Any],
                                 source_name: str,

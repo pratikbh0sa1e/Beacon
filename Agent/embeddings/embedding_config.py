@@ -52,10 +52,10 @@ EMBEDDING_MODELS = {
     # Google Gemini embeddings (cloud-based)
     "gemini-embedding": {
         "model_name": "models/embedding-001",
-        "dimension": 768,
+        "dimension": 1024,  # Native 768, padded to 1024 for BGE-M3 compatibility
         "languages": ["100+ languages"],
-        "description": "Google Gemini embeddings via API",
-        "use_case": "Cloud-based embeddings, no local GPU needed",
+        "description": "Google Gemini embeddings via API (auto-padded to 1024 dims)",
+        "use_case": "Cloud-based embeddings, no local GPU needed, multilingual",
         "engine": "gemini",
         "requires_api_key": True,
         "api_key_env": "GOOGLE_API_KEY"
@@ -66,10 +66,11 @@ EMBEDDING_MODELS = {
 # ACTIVE MODEL CONFIGURATION
 # ============================================
 # Change this to switch embedding models
-# Options: "bge-large-en", "bge-m3", "multilingual-e5-large", "labse"
+# Options: "bge-large-en", "bge-m3", "multilingual-e5-large", "labse", "gemini-embedding"
 
-ACTIVE_MODEL = "bge-m3"  # 🌍 Multilingual model (recommended)
-# ACTIVE_MODEL = "bge-large-en"  # 🇬🇧 Switch back to English-only
+ACTIVE_MODEL = "gemini-embedding"  # 🌐 Google Gemini (cloud-based, multilingual)
+# ACTIVE_MODEL = "bge-m3"  # 🌍 Multilingual model (local)
+# ACTIVE_MODEL = "bge-large-en"  # 🇬🇧 English-only (local)
 
 # ============================================
 # Helper Functions

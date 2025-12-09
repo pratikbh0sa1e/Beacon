@@ -64,9 +64,41 @@ def compare_policies(document_ids: List[int], aspect: str) -> str:
                 DocumentEmbedding.document_id == doc_id
             ).count()
             
+            # If not embedded, try to use extracted_text directly
             if embedding_count == 0:
-                comparison_results[doc_id] = "Document not embedded yet"
-                continue
+                if doc.extracted_text and len(doc.extracted_text) > 100:
+                    # Use extracted text directly for comparison
+                    # Search for aspect keywords in the text
+                    text_lower = doc.extracted_text.lower()
+                    aspect_lower = aspect.lower()
+                    
+                    # Find relevant section (simple keyword search)
+                    if aspect_lower in text_lower:
+                        # Find context around the aspect mention
+                        index = text_lower.find(aspect_lower)
+                        start = max(0, index - 200)
+                        end = min(len(doc.extracted_text), index + 400)
+                        relevant_text = doc.extracted_text[start:end]
+                    else:
+                        # Just take first 400 chars as fallback
+                        relevant_text = doc.extracted_text[:400]
+                    
+                    metadata = db.query(DocumentMetadata).filter(
+                        DocumentMetadata.document_id == doc_id
+                    ).first()
+                    
+                    comparison_results[doc_id] = {
+                        "filename": doc.filename,
+                        "title": metadata.title if metadata else doc.filename,
+                        "relevant_text": relevant_text,
+                        "confidence": 0.70,  # Lower confidence for non-embedded
+                        "approval_status": doc.approval_status,
+                        "note": "(Using direct text - not embedded)"
+                    }
+                    continue
+                else:
+                    comparison_results[doc_id] = "Document not embedded and no text available"
+                    continue
             
             # Search for the aspect in this document
             results = db.query(DocumentEmbedding).filter(
@@ -80,8 +112,14 @@ def compare_policies(document_ids: List[int], aspect: str) -> str:
                 distance = np.linalg.norm(query_embedding - np.array(results[0].embedding))
                 score = 1.0 / (1.0 + distance)
                 
+                # Get document metadata for title
+                metadata = db.query(DocumentMetadata).filter(
+                    DocumentMetadata.document_id == doc_id
+                ).first()
+                
                 comparison_results[doc_id] = {
                     "filename": doc.filename,
+                    "title": metadata.title if metadata else doc.filename,
                     "relevant_text": results[0].chunk_text[:400],
                     "confidence": score,
                     "approval_status": doc.approval_status
@@ -89,17 +127,62 @@ def compare_policies(document_ids: List[int], aspect: str) -> str:
             else:
                 comparison_results[doc_id] = "No relevant information found"
         
-        # Format comparison
-        formatted = f"**Comparison of '{aspect}' across {len(document_ids)} documents:**\n\n"
+        # Format comparison as markdown table
+        formatted = f"## 📊 Comparison: '{aspect}'\n\n"
+        formatted += f"Comparing **{len(document_ids)} documents** on the aspect: **{aspect}**\n\n"
+        
+        # Create markdown table
+        formatted += "| Document ID | Title | Status | Confidence | Key Content |\n"
+        formatted += "|-------------|-------|--------|------------|-------------|\n"
         
         for doc_id, result in comparison_results.items():
             if isinstance(result, dict):
-                approval_badge = "✅" if result['approval_status'] == 'approved' else "⏳"
-                formatted += f"**Document {doc_id}** {approval_badge} ({result['filename']})\n"
-                formatted += f"Confidence: {result['confidence']:.2%}\n"
-                formatted += f"Content: {result['relevant_text']}...\n\n"
+                approval_badge = "✅ Approved" if result['approval_status'] == 'approved' else "⏳ Pending"
+                confidence = f"{result['confidence']:.0%}"
+                # Add note if using direct text
+                if result.get('note'):
+                    confidence += " *"
+                # Truncate title and content for table
+                title = result['title'][:40]
+                if len(result['title']) > 40:
+                    title += "..."
+                content = result['relevant_text'][:100].replace('\n', ' ').replace('|', '\\|')
+                if len(result['relevant_text']) > 100:
+                    content += "..."
+                
+                formatted += f"| {doc_id} | {title} | {approval_badge} | {confidence} | {content} |\n"
             else:
-                formatted += f"**Document {doc_id}**: {result}\n\n"
+                formatted += f"| {doc_id} | - | - | - | {result} |\n"
+        
+        # Add note about direct text usage
+        if any(isinstance(r, dict) and r.get('note') for r in comparison_results.values()):
+            formatted += "\n*Note: Some documents used direct text search (not vector embeddings)*\n"
+        
+        formatted += "\n### 📝 Detailed Comparison\n\n"
+        
+        # Add detailed sections below table with citation format
+        for doc_id, result in comparison_results.items():
+            if isinstance(result, dict):
+                approval_badge = "✅" if result['approval_status'] == 'approved' else "⏳"
+                formatted += f"#### Document ID: {doc_id} {approval_badge}\n"
+                formatted += f"**Title:** {result['title']}\n"
+                formatted += f"**Source:** {result['filename']}\n"
+                formatted += f"**Approval Status:** {result['approval_status']}\n"
+                formatted += f"**Confidence:** {result['confidence']:.2%}"
+                if result.get('note'):
+                    formatted += f" {result['note']}"
+                formatted += "\n\n"
+                formatted += f"**Relevant Content for '{aspect}':**\n"
+                formatted += f"{result['relevant_text']}...\n\n"
+                formatted += "---\n\n"
+        
+        # Add citation summary
+        formatted += "\n### 📚 Referenced Documents\n\n"
+        for doc_id, result in comparison_results.items():
+            if isinstance(result, dict):
+                formatted += f"- Document ID: {doc_id}\n"
+                formatted += f"  Source: {result['filename']}\n"
+                formatted += f"  Approval Status: {result['approval_status']}\n\n"
         
         db.close()
         logger.info(f"Comparison completed for {len(document_ids)} documents")

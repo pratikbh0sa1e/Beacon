@@ -10,6 +10,7 @@ import time
 from datetime import datetime
 
 from .keyword_filter import KeywordFilter
+from .retry_utils import retry_with_backoff, RetriableError
 
 logger = logging.getLogger(__name__)
 
@@ -316,3 +317,169 @@ class WebScraper:
         except Exception as e:
             logger.error(f"Error extracting metadata from {url}: {str(e)}")
             return {"url": url, "error": str(e)}
+    
+    def detect_pagination_links(self, soup: BeautifulSoup) -> List[str]:
+        """
+        Detect pagination links on current page
+        
+        Args:
+            soup: BeautifulSoup object of the page
+        
+        Returns:
+            List of pagination link URLs
+        """
+        pagination_links = []
+        
+        # Common pagination selectors
+        pagination_selectors = [
+            '.pagination a',
+            '.pager a',
+            '.page-numbers a',
+            '[class*="pagination"] a',
+            'a[rel="next"]',
+            'a[rel="prev"]'
+        ]
+        
+        for selector in pagination_selectors:
+            links = soup.select(selector)
+            for link in links:
+                href = link.get('href')
+                if href:
+                    pagination_links.append(href)
+        
+        # Remove duplicates while preserving order
+        seen = set()
+        unique_links = []
+        for link in pagination_links:
+            if link not in seen:
+                seen.add(link)
+                unique_links.append(link)
+        
+        logger.debug(f"Detected {len(unique_links)} pagination links")
+        return unique_links
+    
+    def extract_total_pages(self, soup: BeautifulSoup) -> Optional[int]:
+        """
+        Try to extract total page count from pagination
+        
+        Args:
+            soup: BeautifulSoup object of the page
+        
+        Returns:
+            Total number of pages or None if not detectable
+        """
+        # Look for pagination elements
+        pagination_selectors = [
+            '.pagination', '#pagination',
+            '.pager', '.page-numbers',
+            '[class*="pagination"]'
+        ]
+        
+        for selector in pagination_selectors:
+            pagination = soup.select_one(selector)
+            if pagination:
+                # Find all page numbers
+                page_numbers = []
+                for link in pagination.find_all('a'):
+                    text = link.get_text(strip=True)
+                    if text.isdigit():
+                        page_numbers.append(int(text))
+                
+                if page_numbers:
+                    total = max(page_numbers)
+                    logger.debug(f"Extracted total pages: {total}")
+                    return total
+        
+        return None
+    
+    def scrape_with_retry(self, url: str, max_retries: int = 3) -> Dict[str, Any]:
+        """
+        Scrape with automatic retry and exponential backoff
+        
+        Args:
+            url: URL to scrape
+            max_retries: Maximum number of retry attempts
+        
+        Returns:
+            Scraping result
+        """
+        def _scrape():
+            try:
+                result = self.scrape_page(url)
+                
+                # Check if result indicates an error
+                if result.get('status') == 'error':
+                    raise RetriableError(result.get('error', 'Unknown error'))
+                
+                return result
+            
+            except requests.exceptions.RequestException as e:
+                raise RetriableError(str(e))
+        
+        try:
+            return retry_with_backoff(_scrape, max_retries=max_retries)
+        except Exception as e:
+            logger.error(f"Failed to scrape {url} after {max_retries} retries: {str(e)}")
+            return {
+                "status": "error",
+                "url": url,
+                "error": f"Failed after {max_retries} retries: {str(e)}",
+                "scraped_at": datetime.utcnow().isoformat()
+            }
+    
+    def validate_document_content(self, document: Dict[str, str]) -> bool:
+        """
+        Validate that document content is not empty
+        
+        Args:
+            document: Document dictionary
+        
+        Returns:
+            True if document has valid content
+        """
+        # Check if document has required fields
+        if not document.get('url'):
+            logger.warning("Document missing URL")
+            return False
+        
+        # Check if document has meaningful text
+        text = document.get('text', '').strip()
+        if not text or len(text) < 3:
+            logger.warning(f"Document has empty or minimal content: {document.get('url')}")
+            return False
+        
+        # Check if text is only whitespace
+        if text.isspace():
+            logger.warning(f"Document contains only whitespace: {document.get('url')}")
+            return False
+        
+        return True
+    
+    def find_document_links_with_validation(self,
+                                           url: str,
+                                           extensions: List[str] = None,
+                                           keywords: List[str] = None) -> List[Dict[str, str]]:
+        """
+        Find document links with content validation
+        
+        Args:
+            url: Page URL to search
+            extensions: File extensions to look for
+            keywords: Keywords to filter links
+        
+        Returns:
+            List of validated document links
+        """
+        documents = self.find_document_links(url, extensions, keywords)
+        
+        # Validate documents
+        valid_documents = []
+        for doc in documents:
+            if self.validate_document_content(doc):
+                valid_documents.append(doc)
+            else:
+                logger.debug(f"Filtered out invalid document: {doc.get('url')}")
+        
+        logger.info(f"Validated {len(valid_documents)}/{len(documents)} documents")
+        
+        return valid_documents
