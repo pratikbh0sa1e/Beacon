@@ -2,6 +2,7 @@ from sqlalchemy import create_engine, Column, Integer, String, Text, DateTime, D
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker, relationship
 from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.pool import NullPool
 from pgvector.sqlalchemy import Vector
 from datetime import datetime
 import os
@@ -19,22 +20,17 @@ DATABASE_PASSWORD = os.getenv("DATABASE_PASSWORD")
 
 DATABASE_URL = f"postgresql://{DATABASE_USERNAME}:{DATABASE_PASSWORD}@{DATABASE_HOSTNAME}:{DATABASE_PORT}/{DATABASE_NAME}"
 
-# Create engine with optimized connection pooling and timeout settings
+# Create engine with NullPool for Supabase pooler compatibility
+# NullPool creates a new connection for each request and closes it immediately
+# This prevents SASL authentication issues with Supabase's connection pooler
 engine = create_engine(
     DATABASE_URL,
-    pool_size=30,  # Increased for better concurrency
-    max_overflow=60,  # Increased for peak loads
-    pool_pre_ping=True,  # Verify connections before use
-    pool_recycle=900,  # Recycle connections every 15 min for freshness
-    pool_timeout=30,  # Timeout for getting connection from pool
+    poolclass=NullPool,  # Use NullPool to avoid connection pooling issues
     echo=False,  # Disable SQL logging in production for performance
     connect_args={
-        "connect_timeout": 5,  # Fast failure detection
-        "keepalives": 1,
-        "keepalives_idle": 30,
-        "keepalives_interval": 10,
-        "keepalives_count": 5,
-        "application_name": "beacon_app",  # For monitoring
+        "connect_timeout": 10,
+        "application_name": "beacon_app",
+        "sslmode": "require",
     }
 )
 
@@ -640,6 +636,16 @@ class WebScrapingSource(Base):
     # CSS selectors for targeted scraping (optional)
     document_section_selector = Column(String(200), nullable=True)
     
+    # NEW: Pagination settings
+    pagination_enabled = Column(Boolean, default=False, nullable=False)
+    max_pages = Column(Integer, default=10, nullable=False)
+    
+    # NEW: Scheduling settings
+    schedule_type = Column(String(20), nullable=True)  # 'manual', 'daily', 'weekly', 'custom'
+    schedule_time = Column(String(10), nullable=True)  # '02:00' for daily, cron for custom
+    schedule_enabled = Column(Boolean, default=False, nullable=False)
+    next_scheduled_run = Column(DateTime, nullable=True)
+    
     # Status tracking
     last_scraped_at = Column(DateTime, nullable=True)
     last_scrape_status = Column(String(20), nullable=True)  # success, failed, in_progress
@@ -658,11 +664,13 @@ class WebScrapingSource(Base):
     institution = relationship("Institution", foreign_keys=[institution_id])
     created_by = relationship("User", foreign_keys=[created_by_user_id])
     scrape_logs = relationship("WebScrapingLog", back_populates="source", cascade="all, delete-orphan")
+    jobs = relationship("ScrapingJob", back_populates="source", cascade="all, delete-orphan")
     
     # Indexes
     __table_args__ = (
         Index('idx_web_sources_enabled', 'scraping_enabled'),
         Index('idx_web_sources_institution', 'institution_id'),
+        Index('idx_web_sources_schedule', 'schedule_enabled', 'next_scheduled_run'),
     )
 
 
@@ -734,4 +742,104 @@ class ScrapedDocument(Base):
         Index('idx_scraped_docs_source', 'source_id'),
         Index('idx_scraped_docs_domain', 'source_domain'),
         Index('idx_scraped_docs_hash', 'file_hash'),
+    )
+
+
+class ScrapingJob(Base):
+    """Track individual scraping job executions"""
+    __tablename__ = "scraping_jobs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_id = Column(Integer, ForeignKey("web_scraping_sources.id", ondelete="CASCADE"), nullable=False, index=True)
+    
+    # Job execution details
+    status = Column(String(20), nullable=False, index=True)  # 'pending', 'running', 'completed', 'failed'
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    
+    # Results
+    documents_discovered = Column(Integer, default=0, nullable=False)
+    documents_matched = Column(Integer, default=0, nullable=False)
+    documents_new = Column(Integer, default=0, nullable=False)
+    documents_skipped = Column(Integer, default=0, nullable=False)
+    
+    # Error tracking
+    error_message = Column(Text, nullable=True)
+    retry_count = Column(Integer, default=0, nullable=False)
+    
+    # Metadata
+    triggered_by = Column(String(20), nullable=False)  # 'manual', 'scheduled'
+    execution_time_seconds = Column(Integer, nullable=True)
+    
+    # Timestamps
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    
+    # Relationships
+    source = relationship("WebScrapingSource", back_populates="jobs")
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_scraping_jobs_source_status', 'source_id', 'status'),
+        Index('idx_scraping_jobs_created', 'created_at'),
+    )
+
+
+class ScrapedDocumentTracker(Base):
+    """Track scraped documents for incremental scraping"""
+    __tablename__ = "scraped_document_tracker"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    document_url = Column(String(1000), unique=True, nullable=False, index=True)
+    content_hash = Column(String(64), nullable=False, index=True)  # SHA256
+    
+    first_scraped_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    last_seen_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    source_id = Column(Integer, ForeignKey("web_scraping_sources.id", ondelete="SET NULL"), nullable=True, index=True)
+    document_id = Column(Integer, ForeignKey("documents.id", ondelete="SET NULL"), nullable=True, index=True)
+    
+    # Relationships
+    source = relationship("WebScrapingSource", foreign_keys=[source_id])
+    document = relationship("Document", foreign_keys=[document_id])
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_tracker_url', 'document_url'),
+        Index('idx_tracker_hash', 'content_hash'),
+        Index('idx_tracker_source', 'source_id'),
+    )
+
+
+class SourceHealthMetrics(Base):
+    """Track health metrics for scraping sources"""
+    __tablename__ = "source_health_metrics"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    source_id = Column(Integer, ForeignKey("web_scraping_sources.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+    
+    # Success tracking
+    total_executions = Column(Integer, default=0, nullable=False)
+    successful_executions = Column(Integer, default=0, nullable=False)
+    failed_executions = Column(Integer, default=0, nullable=False)
+    consecutive_failures = Column(Integer, default=0, nullable=False)
+    
+    # Timing
+    last_success_at = Column(DateTime, nullable=True)
+    last_failure_at = Column(DateTime, nullable=True)
+    average_execution_time = Column(Integer, nullable=True)  # seconds
+    
+    # Document metrics
+    total_documents_found = Column(Integer, default=0, nullable=False)
+    average_documents_per_run = Column(Integer, nullable=True)
+    
+    # Timestamps
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    
+    # Relationships
+    source = relationship("WebScrapingSource", foreign_keys=[source_id])
+    
+    # Indexes
+    __table_args__ = (
+        Index('idx_health_metrics_source', 'source_id'),
+        Index('idx_health_metrics_failures', 'consecutive_failures'),
     )

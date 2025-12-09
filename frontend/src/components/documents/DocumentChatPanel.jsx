@@ -9,8 +9,7 @@ import { toast } from "sonner";
 import { useAuthStore } from "../../stores/authStore";
 import { formatDateTime } from "../../utils/dateFormat";
 
-const API_BASE_URL =
-  import.meta.env.VITE_API_BASE_URL || "http://localhost:8000";
+const API_BASE_URL = import.meta.env.VITE_API_URL || "http://localhost:8000";
 
 export const DocumentChatPanel = ({ documentId }) => {
   const { user, token } = useAuthStore();

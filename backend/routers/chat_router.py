@@ -42,6 +42,8 @@ class ChatRequest(BaseModel):
 
 class ChatResponse(BaseModel):
     answer: str
+    format: str = "text"  # NEW: Response format type ("comparison", "count", "list", "text")
+    data: Optional[dict] = None  # NEW: Structured data for formatted responses
     citations: list
     confidence: float
     status: str
@@ -133,6 +135,8 @@ async def generate_stream(question: str, thread_id: str, user_role: str = None, 
                     "type": "metadata",
                     "confidence": chunk.get("confidence", 0.0),
                     "status": chunk.get("status", "success"),
+                    "format": chunk.get("format", "text"),
+                    "data": chunk.get("data"),
                     "timestamp": chunk.get("timestamp")
                 }
                 yield f"data: {json.dumps(data)}\n\n"
@@ -267,6 +271,8 @@ async def chat_query(
         # Step 7: Return response with session and message IDs
         return ChatResponse(
             answer=result["answer"],
+            format=result.get("format", "text"),
+            data=result.get("data"),
             citations=result.get("citations", []),
             confidence=result.get("confidence", 0.0),
             status=result.get("status", "success"),

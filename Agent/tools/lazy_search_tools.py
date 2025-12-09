@@ -285,9 +285,25 @@ def search_specific_document_lazy(document_id: int, query: str, top_k: int = 5, 
         
         if embedding_count == 0:
             logger.info(f"Document {document_id} not embedded in pgvector, embedding now...")
-            # Trigger lazy embedding (will be implemented in lazy_embedder update)
-            db.close()
-            return f"Document {document_id} is being embedded. Please try again in a moment."
+            # Trigger lazy embedding
+            try:
+                result = lazy_embedder.embed_document(document_id)
+                if result['status'] == 'success':
+                    logger.info(f"Successfully embedded doc {document_id}: {result['num_chunks']} chunks")
+                    # Refresh embedding count
+                    embedding_count = db.query(DocumentEmbedding).filter(
+                        DocumentEmbedding.document_id == document_id
+                    ).count()
+                    if embedding_count == 0:
+                        db.close()
+                        return f"Document {document_id} was embedded but no chunks were created. The document may be empty or unreadable."
+                else:
+                    db.close()
+                    return f"Failed to embed document {document_id}: {result.get('message', 'Unknown error')}"
+            except Exception as e:
+                logger.error(f"Error embedding doc {document_id}: {str(e)}")
+                db.close()
+                return f"Error embedding document {document_id}: {str(e)}"
         
         # Generate query embedding
         import numpy as np

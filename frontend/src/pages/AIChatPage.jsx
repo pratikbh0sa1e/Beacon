@@ -317,6 +317,45 @@ export const AIChatPage = () => {
       if (!currentSessionId && messages.length === 0) {
         clearCurrentSession();
       }
+      
+      // Check if we have analysis result from web scraping
+      const analysisResultStr = sessionStorage.getItem('analysisResult');
+      
+      if (analysisResultStr) {
+        // Clear from session storage
+        sessionStorage.removeItem('analysisResult');
+        
+        const analysisResult = JSON.parse(analysisResultStr);
+        
+        // Show the analysis prominently
+        setTimeout(async () => {
+          try {
+            // Create a new session with descriptive title
+            const sessionTitle = `Analysis: ${analysisResult.documents[0].substring(0, 40)}...`;
+            await createSession(sessionTitle);
+            
+            // Send the analysis request message
+            const userMessage = `📄 Analyze these ${analysisResult.documents.length} documents:\n\n${analysisResult.documents.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
+            
+            // Send message which will trigger the chat store to add it
+            // But we already have the analysis, so we'll display it directly
+            await sendMessage(userMessage);
+            
+            // Show prominent success notification
+            toast.success(`✅ Document Analysis Complete!`, {
+              description: `Processed ${analysisResult.documents_processed} documents with ${analysisResult.total_chunks} text chunks`,
+              duration: 5000
+            });
+          } catch (error) {
+            console.error('Error loading analysis:', error);
+            // Fallback: just show the analysis in a toast
+            toast.info('Analysis Results Ready', {
+              description: 'Scroll down to see the complete analysis',
+              duration: 5000
+            });
+          }
+        }, 800);
+      }
     };
     initializeChat();
   }, []);

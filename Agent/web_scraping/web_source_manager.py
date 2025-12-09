@@ -9,6 +9,11 @@ from sqlalchemy.orm import Session
 from .scraper import WebScraper
 from .pdf_downloader import PDFDownloader
 from .provenance_tracker import ProvenanceTracker
+from .pagination_engine import PaginationEngine
+from .incremental_scraper import IncrementalScraper
+from .parallel_processor import ParallelProcessor
+from .local_storage import LocalStorage
+from .config import ScrapingConfig
 
 logger = logging.getLogger(__name__)
 
@@ -16,11 +21,20 @@ logger = logging.getLogger(__name__)
 class WebSourceManager:
     """Manage web scraping sources and orchestrate scraping operations"""
     
-    def __init__(self):
-        """Initialize web source manager"""
+    def __init__(self, storage: Optional[LocalStorage] = None):
+        """
+        Initialize web source manager
+        
+        Args:
+            storage: LocalStorage instance (creates new if not provided)
+        """
         self.scraper = WebScraper()
         self.downloader = PDFDownloader()
         self.provenance = ProvenanceTracker()
+        self.pagination_engine = PaginationEngine(self.scraper)
+        self.storage = storage or LocalStorage()
+        self.incremental_scraper = IncrementalScraper(self.storage)
+        self.parallel_processor = ParallelProcessor(max_workers=5)
     
     def scrape_source(self,
                      url: str,
@@ -241,21 +255,22 @@ class WebSourceManager:
     
     def validate_source(self, url: str) -> Dict[str, Any]:
         """
-        Validate if a URL is a valid scraping source
+        Validate if a URL is a valid scraping source (Enhanced with accessibility check)
         
         Args:
             url: URL to validate
         
         Returns:
-            Validation result
+            Validation result with accessibility and document presence
         """
         try:
-            # Try to scrape the page
-            page_result = self.scraper.scrape_page(url)
+            # Try to scrape the page with retry
+            page_result = self.scraper.scrape_with_retry(url, max_retries=2)
             
             if page_result['status'] != 'success':
                 return {
                     "valid": False,
+                    "accessible": False,
                     "error": page_result.get('error'),
                     "message": "Failed to access URL"
                 }
@@ -271,6 +286,7 @@ class WebSourceManager:
                 "valid": True,
                 "accessible": True,
                 "documents_found": len(documents),
+                "has_documents": len(documents) > 0,
                 "credibility_score": credibility,
                 "message": f"Valid source with {len(documents)} documents found"
             }
@@ -279,6 +295,215 @@ class WebSourceManager:
             logger.error(f"Error validating source {url}: {str(e)}")
             return {
                 "valid": False,
+                "accessible": False,
                 "error": str(e),
                 "message": "Validation failed"
             }
+    
+    def scrape_source_with_pagination(self,
+                                     source_id: int,
+                                     url: str,
+                                     source_name: str,
+                                     keywords: Optional[List[str]] = None,
+                                     pagination_enabled: bool = False,
+                                     max_pages: int = 10,
+                                     incremental: bool = False,
+                                     max_documents: Optional[int] = None) -> Dict[str, Any]:
+        """
+        Scrape source with pagination and incremental support
+        
+        Args:
+            source_id: Source ID for tracking
+            url: Source URL
+            source_name: Source name
+            keywords: Keywords for filtering
+            pagination_enabled: Whether to use pagination
+            max_pages: Maximum pages to scrape
+            incremental: Whether to use incremental scraping
+            max_documents: Maximum documents to collect (defaults to config)
+        
+        Returns:
+            Enhanced scraping result
+        """
+        # Use config default if not specified
+        if max_documents is None:
+            max_documents = ScrapingConfig.get_max_documents()
+        
+        logger.info(f"Scraping {source_name} (pagination={pagination_enabled}, incremental={incremental}, max_docs={max_documents})")
+        start_time = datetime.utcnow()
+        
+        try:
+            # Scrape with or without pagination
+            if pagination_enabled:
+                documents = self.pagination_engine.scrape_all_pages(
+                    base_url=url,
+                    keywords=keywords,
+                    max_pages=max_pages,
+                    max_documents=max_documents
+                )
+            else:
+                documents = self.scraper.find_document_links(url, keywords=keywords)
+                # Apply document limit for non-paginated scraping too
+                if len(documents) > max_documents:
+                    logger.info(f"Limiting documents from {len(documents)} to {max_documents}")
+                    documents = documents[:max_documents]
+            
+            total_discovered = len(documents)
+            
+            # Apply incremental filtering if enabled
+            if incremental:
+                filter_result = self.incremental_scraper.scrape_new_documents(
+                    source_id=source_id,
+                    all_documents=documents
+                )
+                
+                new_documents = filter_result['new_documents']
+                skipped_documents = filter_result['skipped_documents']
+                
+                # Mark new documents as scraped
+                self.incremental_scraper.mark_documents_scraped(new_documents, source_id)
+                
+                documents = new_documents
+            else:
+                skipped_documents = []
+            
+            # Add provenance to all documents
+            for doc in documents:
+                additional_metadata = {
+                    'matched_keywords': doc.get('matched_keywords', []),
+                    'source_id': source_id
+                }
+                
+                provenance_record = self.provenance.create_provenance_record(
+                    url=doc['url'],
+                    document_title=doc['text'],
+                    source_page=url,
+                    scraped_at=doc['found_at'],
+                    additional_metadata=additional_metadata
+                )
+                doc['provenance'] = provenance_record
+            
+            end_time = datetime.utcnow()
+            duration = (end_time - start_time).total_seconds()
+            
+            logger.info(
+                f"Scrape complete: {len(documents)} new documents "
+                f"({len(skipped_documents)} skipped) in {duration}s"
+            )
+            
+            return {
+                "status": "success",
+                "source_id": source_id,
+                "source_name": source_name,
+                "source_url": url,
+                "documents_discovered": total_discovered,
+                "documents_matched": len(documents) + len(skipped_documents),
+                "documents_new": len(documents),
+                "documents_skipped": len(skipped_documents),
+                "documents": documents,
+                "pagination_used": pagination_enabled,
+                "incremental_used": incremental,
+                "scraped_at": start_time.isoformat(),
+                "execution_time_seconds": int(duration)
+            }
+        
+        except Exception as e:
+            logger.error(f"Error scraping {source_name}: {str(e)}", exc_info=True)
+            return {
+                "status": "error",
+                "source_id": source_id,
+                "source_name": source_name,
+                "source_url": url,
+                "error": str(e),
+                "error_type": type(e).__name__,
+                "scraped_at": start_time.isoformat()
+            }
+    
+    def scrape_multiple_sources_parallel(self,
+                                        sources: List[Dict[str, Any]],
+                                        rate_limit_delay: float = 1.0) -> Dict[str, Any]:
+        """
+        Scrape multiple sources in parallel with fault isolation
+        
+        Args:
+            sources: List of source configurations
+            rate_limit_delay: Delay between requests to same domain
+        
+        Returns:
+            Aggregated results from all sources
+        """
+        logger.info(f"Starting parallel scraping of {len(sources)} sources")
+        start_time = datetime.utcnow()
+        
+        def scrape_single_source(source: Dict[str, Any]) -> Dict[str, Any]:
+            """Scrape a single source"""
+            return self.scrape_source_with_pagination(
+                source_id=source.get('id', 0),
+                url=source['url'],
+                source_name=source['name'],
+                keywords=source.get('keywords'),
+                pagination_enabled=source.get('pagination_enabled', False),
+                max_pages=source.get('max_pages', 10),
+                incremental=source.get('incremental', False)
+            )
+        
+        # Scrape in parallel
+        results = self.parallel_processor.scrape_sources_parallel(
+            sources=sources,
+            scrape_func=scrape_single_source,
+            rate_limit_delay=rate_limit_delay
+        )
+        
+        end_time = datetime.utcnow()
+        total_duration = (end_time - start_time).total_seconds()
+        
+        # Aggregate results
+        successful = sum(1 for r in results if r.get('status') == 'success')
+        failed = len(results) - successful
+        total_documents = sum(r.get('documents_new', 0) for r in results)
+        
+        logger.info(
+            f"Parallel scraping complete: {successful}/{len(sources)} successful, "
+            f"{total_documents} total documents in {total_duration}s"
+        )
+        
+        return {
+            "status": "success",
+            "total_sources": len(sources),
+            "successful": successful,
+            "failed": failed,
+            "total_documents": total_documents,
+            "total_duration_seconds": int(total_duration),
+            "sources": results
+        }
+    
+    def log_scraping_error(self,
+                          source_id: int,
+                          url: str,
+                          error: Exception) -> Dict[str, Any]:
+        """
+        Log comprehensive error details for debugging
+        
+        Args:
+            source_id: Source ID
+            url: Source URL
+            error: Exception that occurred
+        
+        Returns:
+            Error log entry
+        """
+        error_log = {
+            "source_id": source_id,
+            "document_url": url,
+            "error_type": type(error).__name__,
+            "error_message": str(error),
+            "timestamp": datetime.utcnow().isoformat(),
+            "traceback": None  # Could add traceback if needed
+        }
+        
+        logger.error(
+            f"Scraping error for source {source_id}: "
+            f"{error_log['error_type']} - {error_log['error_message']}"
+        )
+        
+        return error_log

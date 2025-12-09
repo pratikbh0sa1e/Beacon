@@ -23,6 +23,8 @@ from backend.routers import (
 )
 # Temporary: Use no-DB version until migration is complete
 from backend.routers import web_scraping_router_temp as web_scraping_router
+from backend.routers import document_analysis_router
+from backend.routers import scraping_logs
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
 from dotenv import load_dotenv
@@ -31,8 +33,26 @@ import time
 
 load_dotenv()
 
-# Setup logging
-logging.basicConfig(level=logging.INFO)
+# Setup logging with UTF-8 encoding for Windows
+import sys
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+# Force UTF-8 encoding for console output on Windows
+if sys.platform == 'win32':
+    try:
+        sys.stdout.reconfigure(encoding='utf-8')
+        sys.stderr.reconfigure(encoding='utf-8')
+    except AttributeError:
+        # Python < 3.7
+        import codecs
+        sys.stdout = codecs.getwriter('utf-8')(sys.stdout.buffer, 'strict')
+        sys.stderr = codecs.getwriter('utf-8')(sys.stderr.buffer, 'strict')
+
 logger = logging.getLogger(__name__)
 
 # Create database tables
@@ -67,7 +87,9 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
+        "http://localhost:3001",  # Added for frontend running on port 3001
         "http://127.0.0.1:3000",
+        "http://127.0.0.1:3001",
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -95,6 +117,8 @@ app.include_router(insights_router.router, tags=["insights"])
 app.include_router(document_chat_router.router, tags=["document-chat"])
 app.include_router(notes_router.router, tags=["notes"])
 app.include_router(web_scraping_router.router, tags=["web-scraping"])  # Web scraping endpoints
+app.include_router(document_analysis_router.router, tags=["document-analysis"])  # Document analysis with AI
+app.include_router(scraping_logs.router, tags=["scraping-logs"])  # Scraping logs
 app.include_router(ocr_router.router, prefix="/ocr", tags=["ocr"])
 
 @app.get("/")

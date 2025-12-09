@@ -72,6 +72,8 @@ class WebSourceResponse(BaseModel):
 
 class ScrapeRequest(BaseModel):
     max_documents: Optional[int] = None
+    pagination_enabled: bool = True
+    max_pages: int = 100
 
 
 # Helper function to check admin permissions
@@ -256,11 +258,22 @@ def trigger_scrape(
             detail="Web scraping source not found"
         )
     
-    # Trigger scraping
+    # Trigger scraping with pagination support
     processor = WebScrapingProcessor()
-    max_docs = request.max_documents if request else None
     
-    result = processor.scrape_and_process_source(source_id, db, max_documents=max_docs)
+    if request:
+        result = processor.scrape_and_process_source(
+            source_id=source_id,
+            db_session=db,
+            max_documents=request.max_documents,
+            pagination_enabled=request.pagination_enabled,
+            max_pages=request.max_pages
+        )
+    else:
+        result = processor.scrape_and_process_source(
+            source_id=source_id,
+            db_session=db
+        )
     
     return result
 

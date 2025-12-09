@@ -1,0 +1,135 @@
+{
+  "51a45c357aef33976676b0cd44cae9ad": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/1857727_Fee-Refund-Policy-2025-26.pdf",
+    "content_hash": "14fdb1c495d479e0b1b6fd4b5994b95d0dbb1a52f0741b39af7aadb29288804a",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.040008",
+    "last_seen_at": "2025-12-08T19:42:33.040008"
+  },
+  "f275546d407f7c918b99d5d76289c62d": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/0554849_Dearness-allowance.pdf",
+    "content_hash": "dcc2524161da40c48b935a7eb89ed54998ad768efc2f5c91c41649971c5e03a1",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.065010",
+    "last_seen_at": "2025-12-08T19:42:33.065010"
+  },
+  "e3f627d122107767fe09a72db45df1be": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/0934728_Circular-Grant-of-Dearness-Relief.pdf",
+    "content_hash": "56dc1cc3a93af81f389172e92bf7fa3be01c73f1a4d59355568bc959d84106ab",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.078023",
+    "last_seen_at": "2025-12-08T19:42:33.078023"
+  },
+  "0deb0815f9dcf00680a2e6639f69d26d": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/6265488_DA-Circular.pdf",
+    "content_hash": "c1068cbbfdcfbc3a84b4f08c10f0839c380b859461f390b9e8ab6ef04a1921fa",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.095553",
+    "last_seen_at": "2025-12-08T19:42:33.095553"
+  },
+  "d6ef55c6680ced589673d25f1a2f4c78": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/9110892_Circular-immovable-movable-property.pdf",
+    "content_hash": "73fde7338e9681c468d2a061fe35ae52b4c610db20d34297c78d02e3a529e56f",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.109813",
+    "last_seen_at": "2025-12-08T19:42:33.109813"
+  },
+  "3f625d580f12e866801354b29e6f7a73": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/7005067_Office-Memorandum001.pdf",
+    "content_hash": "31531e2219dc933660fcde7489e2004541aa183e4071ec4abf720cd9efced3d2",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.125060",
+    "last_seen_at": "2025-12-08T19:42:33.125060"
+  },
+  "25d87523b19b48542138a188921444d5": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/4369607_Circular-Vigilance-Awarness-Week.pdf",
+    "content_hash": "2f2b2615b853fc14ed4c12bd2b88497b55176cc7d3be4ecc1411d1065a7a849a",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.142623",
+    "last_seen_at": "2025-12-08T19:42:33.142623"
+  },
+  "28fe76dc817f665a52e4eb062a6aaf5b": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/5763563_circular001_30_Oct.pdf",
+    "content_hash": "e73bb5fefeda3dc0dae676c906e7e1d5143560763e9fae6f0586bee85112f5e2",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.158643",
+    "last_seen_at": "2025-12-08T19:42:33.158643"
+  },
+  "6623ffc0d09c78c8d4d1c5ee967f3cd0": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/2139137_CCS001.pdf",
+    "content_hash": "65ca3e035ae9c160a15309fc8433782e2ac78b22d25fcf318df0e13b88983679",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.176229",
+    "last_seen_at": "2025-12-08T19:42:33.176229"
+  },
+  "e4a5945abc784ac659b1ad68056e358a": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/8874866_Circular-Central-Civil-Services-Pension-Rules.pdf",
+    "content_hash": "a57437b5828f685aadd58cdae6751a628f8e70480307da0b9fde23a075e54a87",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.208569",
+    "last_seen_at": "2025-12-08T19:42:33.208569"
+  },
+  "810a62b4c61adb05a1ef2adf84e102cd": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/8212051_Circular-payment-of-gratuity-Act-1972.pdf",
+    "content_hash": "39b7afbc58cee28966a47d2e46052af8a1f8c1d3b35a5163a2c032f2590159af",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.231684",
+    "last_seen_at": "2025-12-08T19:42:33.231684"
+  },
+  "52b08078210d9b20c6931cd891057c65": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/0684946_CIRCULAR-003-1.pdf",
+    "content_hash": "f67c5528d74a8f6937d092dcdc309e35ce25094ce5b5c9c9e4984e7190467479",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.249925",
+    "last_seen_at": "2025-12-08T19:42:33.249925"
+  },
+  "fc6e4e085bce1674d4daf9f28cc5944a": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/5590166_Circular-DA-April.pdf",
+    "content_hash": "cbaa8d20d799e13ed72d585975689b9aa970419e83ca24261958a64a5080d6e4",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.267758",
+    "last_seen_at": "2025-12-08T19:42:33.267758"
+  },
+  "151b559f0df786c525b2832e7b23f90d": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/3064138_Circular-DA-March.pdf",
+    "content_hash": "83c0ccaeee596e962b07cef4e4eb2cdd614e439ddfebb3ffbb0dbe573985678e",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.302062",
+    "last_seen_at": "2025-12-08T19:42:33.302062"
+  },
+  "6ad2ddd52259d2cd20cd3c608cd5c335": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/6594326_Declaration-property-Circular.pdf",
+    "content_hash": "e741483cefe53297c30fc849ccc410467849eccf605a6c4982565cae7579c388",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.351893",
+    "last_seen_at": "2025-12-08T19:42:33.351893"
+  },
+  "89747f07eaa0bd09779cf02642df9a21": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/7350093_circular-Divyagjan-10-2021.pdf",
+    "content_hash": "5c66a071c2923c1181bd9e2880965a70c7a2e763e8ab5b0d2873c6c091aaa45e",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.391540",
+    "last_seen_at": "2025-12-08T19:42:33.391540"
+  },
+  "1aab5e64ec4601459926f0d134d85fe5": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/8886434_calculation-of-Gratuity-and-Cash-payment-in-lieu-of-leave.pdf",
+    "content_hash": "448abd113d91f87a02e593a0e3c49ab1ed82a2da511c3638543da36833a92d1d",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.413528",
+    "last_seen_at": "2025-12-08T19:42:33.413528"
+  },
+  "0d7203b09983d38f72c4ed581ab6ce43": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/0054521_List-of-Eligible-Indian-Institution-for-Collaboration.pdf",
+    "content_hash": "abae9f4ef6f836235a7a470f51ba5b2823f88ba3a5666d4734483fe41bebb0ea",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.439125",
+    "last_seen_at": "2025-12-08T19:42:33.439125"
+  },
+  "dcb8b1427997a0b0776435b8cfbc3a28": {
+    "document_url": "https://www.ugc.gov.in/pdfnews/0775288_Public-Notice---Equivalence-Regulations.pdf",
+    "content_hash": "64d0acdd48b6216e607e8fca168b08bd2541de9c1605ae4662df373587721979",
+    "source_id": 1,
+    "first_scraped_at": "2025-12-08T19:42:33.462207",
+    "last_seen_at": "2025-12-08T19:42:33.462207"
+  }
+}

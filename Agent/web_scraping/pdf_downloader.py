@@ -33,85 +33,105 @@ class PDFDownloader:
     
     def download_document(self, url: str,
                          filename: Optional[str] = None,
-                         timeout: int = 60) -> Dict[str, Any]:
+                         timeout: int = 60,
+                         retry_count: int = 3) -> Dict[str, Any]:
         """
-        Download a document from URL
+        Download a document from URL with retry logic
         
         Args:
             url: Document URL
             filename: Custom filename (optional, will generate from URL if not provided)
             timeout: Download timeout in seconds
+            retry_count: Number of retry attempts for failed downloads
         
         Returns:
             Dict with download status and file info
         """
-        try:
-            logger.info(f"Downloading: {url}")
-            
-            # Generate filename if not provided
-            if not filename:
-                filename = self._generate_filename(url)
-            
-            filepath = os.path.join(self.download_dir, filename)
-            
-            # Download file
-            response = self.session.get(url, timeout=timeout, stream=True)
-            response.raise_for_status()
-            
-            # Check content type
-            content_type = response.headers.get('Content-Type', '')
-            
-            # Write to file
-            with open(filepath, 'wb') as f:
-                for chunk in response.iter_content(chunk_size=8192):
-                    if chunk:
-                        f.write(chunk)
-            
-            # Get file size
-            file_size = os.path.getsize(filepath)
-            
-            # Calculate file hash for deduplication
-            file_hash = self._calculate_file_hash(filepath)
-            
-            logger.info(f"Downloaded {filename} ({file_size} bytes)")
-            
-            return {
-                "status": "success",
-                "url": url,
-                "filepath": filepath,
-                "filename": filename,
-                "file_size": file_size,
-                "file_hash": file_hash,
-                "content_type": content_type,
-                "downloaded_at": datetime.utcnow().isoformat()
-            }
+        last_error = None
         
-        except requests.exceptions.Timeout:
-            logger.error(f"Timeout downloading {url}")
-            return {
-                "status": "error",
-                "url": url,
-                "error": "Download timeout",
-                "downloaded_at": datetime.utcnow().isoformat()
-            }
+        for attempt in range(retry_count):
+            try:
+                logger.info(f"Downloading: {url} (attempt {attempt + 1}/{retry_count})")
+                
+                # Generate filename if not provided
+                if not filename:
+                    filename = self._generate_filename(url)
+                
+                filepath = os.path.join(self.download_dir, filename)
+                
+                # Try different user agents on retry
+                headers = {
+                    'User-Agent': self._get_user_agent(attempt),
+                    'Accept': 'application/pdf,application/octet-stream,*/*',
+                    'Accept-Language': 'en-US,en;q=0.9',
+                    'Referer': url.rsplit('/', 1)[0] + '/'
+                }
+                
+                # Download file
+                response = self.session.get(url, timeout=timeout, stream=True, headers=headers)
+                response.raise_for_status()
+                
+                # Check content type
+                content_type = response.headers.get('Content-Type', '')
+                
+                # Write to file
+                with open(filepath, 'wb') as f:
+                    for chunk in response.iter_content(chunk_size=8192):
+                        if chunk:
+                            f.write(chunk)
+                
+                # Get file size
+                file_size = os.path.getsize(filepath)
+                
+                # Calculate file hash for deduplication
+                file_hash = self._calculate_file_hash(filepath)
+                
+                logger.info(f"Downloaded {filename} ({file_size} bytes)")
+                
+                return {
+                    "status": "success",
+                    "url": url,
+                    "filepath": filepath,
+                    "filename": filename,
+                    "file_size": file_size,
+                    "file_hash": file_hash,
+                    "content_type": content_type,
+                    "downloaded_at": datetime.utcnow().isoformat()
+                }
+            
+            except requests.exceptions.Timeout as e:
+                last_error = f"Download timeout"
+                logger.warning(f"Timeout downloading {url} (attempt {attempt + 1}/{retry_count})")
+                if attempt < retry_count - 1:
+                    import time
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+            
+            except requests.exceptions.RequestException as e:
+                last_error = str(e)
+                logger.warning(f"Error downloading {url}: {str(e)} (attempt {attempt + 1}/{retry_count})")
+                if attempt < retry_count - 1:
+                    import time
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
+            
+            except Exception as e:
+                last_error = f"Unexpected error: {str(e)}"
+                logger.warning(f"Unexpected error downloading {url}: {str(e)} (attempt {attempt + 1}/{retry_count})")
+                if attempt < retry_count - 1:
+                    import time
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                    continue
         
-        except requests.exceptions.RequestException as e:
-            logger.error(f"Error downloading {url}: {str(e)}")
-            return {
-                "status": "error",
-                "url": url,
-                "error": str(e),
-                "downloaded_at": datetime.utcnow().isoformat()
-            }
-        
-        except Exception as e:
-            logger.error(f"Unexpected error downloading {url}: {str(e)}")
-            return {
-                "status": "error",
-                "url": url,
-                "error": f"Unexpected error: {str(e)}",
-                "downloaded_at": datetime.utcnow().isoformat()
-            }
+        # All retries failed
+        logger.error(f"Failed to download {url} after {retry_count} attempts: {last_error}")
+        return {
+            "status": "error",
+            "url": url,
+            "error": last_error,
+            "attempts": retry_count,
+            "downloaded_at": datetime.utcnow().isoformat()
+        }
     
     def download_batch(self, urls: list,
                       max_concurrent: int = 5) -> Dict[str, Any]:
@@ -182,6 +202,24 @@ class PDFDownloader:
         for char in invalid_chars:
             filename = filename.replace(char, '_')
         return filename
+    
+    def _get_user_agent(self, attempt: int = 0) -> str:
+        """
+        Get user agent string, rotating through different ones on retry
+        
+        Args:
+            attempt: Retry attempt number
+        
+        Returns:
+            User agent string
+        """
+        user_agents = [
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:121.0) Gecko/20100101 Firefox/121.0',
+            'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+            'BEACON Policy Intelligence Bot/1.0 (Educational Research)',
+        ]
+        return user_agents[attempt % len(user_agents)]
     
     def _calculate_file_hash(self, filepath: str) -> str:
         """
