@@ -507,15 +507,56 @@ def enhanced_scrape_source(
             documents = scraper.get_document_links(page_result['soup'], source.url)
             stats["documents_discovered"] = len(documents)
             
-            logger.info(f"Found {len(documents)} document links")
+            logger.info(f"Found {len(documents)} document links on first page")
             
-            # Process each document (limit for testing)
+            # ✅ NEW: Add pagination support
+            if pagination_enabled and len(documents) < max_documents:
+                pagination_links = scraper.get_pagination_links(page_result['soup'], source.url)
+                
+                pages_scraped = 1
+                for page_url in pagination_links:
+                    if pages_scraped >= max_pages:
+                        break
+                    
+                    if stats["documents_discovered"] >= max_documents:
+                        break
+                    
+                    try:
+                        logger.info(f"Scraping additional page {pages_scraped + 1}: {page_url}")
+                        
+                        page_result = scraper.scrape_page(page_url)
+                        if page_result['status'] != 'success':
+                            continue
+                        
+                        more_documents = scraper.get_document_links(page_result['soup'], page_url)
+                        documents.extend(more_documents)
+                        stats["documents_discovered"] += len(more_documents)
+                        stats["pages_scraped"] += 1
+                        pages_scraped += 1
+                        
+                        logger.info(f"Found {len(more_documents)} more documents on page {pages_scraped}")
+                        
+                        # Rate limiting between pages
+                        time.sleep(1)
+                        
+                    except Exception as e:
+                        logger.error(f"Error scraping page {page_url}: {e}")
+                        continue
+            
+            logger.info(f"Total documents discovered across {stats['pages_scraped']} pages: {stats['documents_discovered']}")
+            
+            # ✅ FIXED: Process all documents up to max_documents (removed 10-doc limit)
             processed_count = 0
-            for doc_info in documents[:min(max_documents, 10)]:  # Limit to 10 for testing
+            for doc_info in documents[:max_documents]:  # ✅ No more hard-coded limit!
                 if processed_count >= max_documents:
                     break
                 
                 try:
+                    # ✅ NEW: Progress logging every 50 documents
+                    if processed_count > 0 and processed_count % 50 == 0:
+                        logger.info(f"Progress: {processed_count}/{min(len(documents), max_documents)} documents processed")
+                        logger.info(f"Stats: {stats['documents_new']} new, {stats['documents_unchanged']} unchanged")
+                    
                     # Filter by keywords if provided
                     if keywords:
                         title_lower = doc_info.get('title', '').lower()
@@ -639,6 +680,9 @@ def enhanced_scrape_source(
                     processed_count += 1
                     
                     logger.info(f"Successfully processed document {document.id}: {doc_info['title']}")
+                    
+                    # ✅ FIXED: Faster rate limiting for large scrapes
+                    time.sleep(0.2)  # Was missing, now added for rate limiting
                     
                 except Exception as e:
                     logger.error(f"Error processing document {doc_info.get('url', 'unknown')}: {str(e)}")
