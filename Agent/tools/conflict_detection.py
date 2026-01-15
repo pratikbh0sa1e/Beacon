@@ -27,7 +27,7 @@ class ConflictDetector:
             google_api_key: Google API key for Gemini
         """
         genai.configure(api_key=google_api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         self.lazy_embedder = LazyEmbedder()
         self.pgvector_store = PGVectorStore()
         self.embedder = BGEEmbedder()

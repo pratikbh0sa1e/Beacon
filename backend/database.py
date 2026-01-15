@@ -100,6 +100,29 @@ class User(Base):
     )
 
 
+class DocumentFamily(Base):
+    """Document families for versioning and grouping related documents"""
+    __tablename__ = "document_families"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    canonical_title = Column(String(500), nullable=False)
+    category = Column(String(100), nullable=True, index=True)
+    ministry = Column(String(200), nullable=True, index=True)
+    family_centroid_embedding = Column(Vector(1024), nullable=True)
+    
+    created_at = Column(DateTime, nullable=False, default=datetime.utcnow)
+    updated_at = Column(DateTime, nullable=False, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    documents = relationship("Document", foreign_keys="Document.document_family_id", back_populates="family", cascade="all, delete-orphan")
+    
+    # Performance indexes
+    __table_args__ = (
+        Index('idx_families_category', 'category'),
+        Index('idx_families_ministry', 'ministry'),
+    )
+
+
 class Document(Base):
     """Documents with metadata and access control"""
     __tablename__ = "documents"
@@ -110,6 +133,17 @@ class Document(Base):
     file_path = Column(String)
     s3_url = Column(String)
     extracted_text = Column(Text)
+    
+    # Document versioning and family grouping
+    document_family_id = Column(Integer, ForeignKey("document_families.id"), nullable=True, index=True)  # Existing column
+    family_id = Column(Integer, ForeignKey("document_families.id"), nullable=True, index=True)  # New column
+    version_number = Column(String(20), nullable=True, default="1.0")
+    is_latest_version = Column(Boolean, nullable=False, default=True, index=True)
+    superseded_by_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    supersedes_id = Column(Integer, ForeignKey("documents.id"), nullable=True)
+    content_hash = Column(String(64), nullable=True, index=True)  # SHA256 for deduplication
+    source_url = Column(String(1000), nullable=True, index=True)  # Original URL if scraped
+    last_modified_at_source = Column(DateTime, nullable=True)  # Last modified date at source
     
     # Access control
     visibility_level = Column(String(50), default="public")
@@ -148,6 +182,7 @@ class Document(Base):
         cascade="all, delete-orphan"
     )
     bookmarks = relationship("Bookmark", cascade="all, delete-orphan", back_populates="document")
+    family = relationship("DocumentFamily", foreign_keys=[document_family_id], back_populates="documents")
 
     # ✅ FIXED: Specify foreign_keys in both relationships
     uploader = relationship(
@@ -161,6 +196,10 @@ class Document(Base):
         back_populates="approved_documents"
     )
     
+    # Version relationships
+    superseded_by = relationship("Document", remote_side=[id], foreign_keys=[superseded_by_id], post_update=True)
+    supersedes = relationship("Document", remote_side=[id], foreign_keys=[supersedes_id], post_update=True)
+    
     institution = relationship("Institution")
     
     # Performance indexes for frequently queried columns
@@ -171,6 +210,11 @@ class Document(Base):
         Index('idx_doc_uploaded_at', 'uploaded_at'),
         Index('idx_doc_institution', 'institution_id'),
         Index('idx_doc_requires_moe', 'requires_moe_approval'),
+        Index('idx_documents_family_id', 'family_id'),
+        Index('idx_documents_is_latest', 'is_latest_version'),
+        Index('idx_documents_content_hash', 'content_hash'),
+        Index('idx_documents_source_url', 'source_url'),
+        Index('idx_documents_family_latest', 'family_id', 'is_latest_version'),
     )
 
 

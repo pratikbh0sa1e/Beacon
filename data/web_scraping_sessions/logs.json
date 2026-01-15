@@ -190,5 +190,37 @@
     "error_message": null,
     "started_at": "2025-12-09T07:52:33.183229",
     "completed_at": "2025-12-09T07:53:56.037244"
+  },
+  {
+    "id": 13,
+    "source_id": 3,
+    "source_name": "Ministry of Education",
+    "status": "success",
+    "documents_found": 0,
+    "documents_discovered": 593,
+    "documents_matched": 593,
+    "documents_skipped": 0,
+    "keywords_used": [],
+    "documents_downloaded": 0,
+    "documents_processed": 0,
+    "error_message": null,
+    "started_at": "2026-01-04T06:31:15.746417",
+    "completed_at": "2026-01-04T06:32:34.658268"
+  },
+  {
+    "id": 14,
+    "source_id": 3,
+    "source_name": "Ministry of Education",
+    "status": "success",
+    "documents_found": 0,
+    "documents_discovered": 593,
+    "documents_matched": 593,
+    "documents_skipped": 0,
+    "keywords_used": [],
+    "documents_downloaded": 0,
+    "documents_processed": 0,
+    "error_message": null,
+    "started_at": "2026-01-07T20:05:48.352221",
+    "completed_at": "2026-01-07T20:06:51.477209"
   }
 ]

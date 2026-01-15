@@ -25,6 +25,7 @@ from backend.routers import (
 from backend.routers import web_scraping_router_temp as web_scraping_router
 from backend.routers import document_analysis_router
 from backend.routers import scraping_logs
+from backend.routers.enhanced_web_scraping_router import router as enhanced_scraping_router
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
 from dotenv import load_dotenv
@@ -117,6 +118,7 @@ app.include_router(insights_router.router, tags=["insights"])
 app.include_router(document_chat_router.router, tags=["document-chat"])
 app.include_router(notes_router.router, tags=["notes"])
 app.include_router(web_scraping_router.router, tags=["web-scraping"])  # Web scraping endpoints
+app.include_router(enhanced_scraping_router, tags=["enhanced-web-scraping"])  # Enhanced web scraping with families
 app.include_router(document_analysis_router.router, tags=["document-analysis"])  # Document analysis with AI
 app.include_router(scraping_logs.router, tags=["scraping-logs"])  # Scraping logs
 app.include_router(ocr_router.router, prefix="/ocr", tags=["ocr"])

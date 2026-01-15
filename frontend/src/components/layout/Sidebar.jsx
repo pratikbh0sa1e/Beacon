@@ -47,7 +47,12 @@ const menuItems = [
     icon: FileSearch,
     label: "OCR Review",
     path: "/ocr-review",
-    roles: ["developer", "ministry_admin", "university_admin", "document_officer"],
+    roles: [
+      "developer",
+      "ministry_admin",
+      "university_admin",
+      "document_officer",
+    ],
   },
   {
     icon: Users,
@@ -71,6 +76,12 @@ const menuItems = [
     icon: Globe,
     label: "Web Scraping",
     path: "/admin/web-scraping",
+    roles: ADMIN_ROLES,
+  },
+  {
+    icon: Globe,
+    label: "Enhanced Web Scraping",
+    path: "/admin/web-scraping-enhanced",
     roles: ADMIN_ROLES,
   },
   {

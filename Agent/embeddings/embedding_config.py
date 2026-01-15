@@ -68,8 +68,8 @@ EMBEDDING_MODELS = {
 # Change this to switch embedding models
 # Options: "bge-large-en", "bge-m3", "multilingual-e5-large", "labse", "gemini-embedding"
 
-ACTIVE_MODEL = "gemini-embedding"  # 🌐 Google Gemini (cloud-based, multilingual)
-# ACTIVE_MODEL = "bge-m3"  # 🌍 Multilingual model (local)
+# ACTIVE_MODEL = "gemini-embedding"  # 🌐 Google Gemini (cloud-based, multilingual) - QUOTA EXCEEDED
+ACTIVE_MODEL = "bge-m3"  # 🌍 Multilingual model (local)
 # ACTIVE_MODEL = "bge-large-en"  # 🇬🇧 English-only (local)
 
 # ============================================

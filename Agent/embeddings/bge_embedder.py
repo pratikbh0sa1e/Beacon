@@ -92,7 +92,9 @@ class BGEEmbedder:
     def _init_sentence_transformer(self, model_name: str, device: str = None):
         """Initialize Sentence Transformer model"""
         if device is None:
-            device = 'cuda' if torch.cuda.is_available() else 'cpu'
+            # Force CPU mode to avoid CUDA memory issues
+            device = 'cpu'
+            logger.info("Forcing CPU mode to avoid CUDA memory issues")
         
         logger.info(f"Using Sentence Transformers on {device}")
         self.model = SentenceTransformer(model_name, device=device)

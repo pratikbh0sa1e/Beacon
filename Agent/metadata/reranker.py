@@ -37,7 +37,7 @@ class DocumentReranker:
                 raise ValueError("Google API key required for Gemini reranker")
             
             self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.0-flash",
+                model="gemini-2.5-flash",
                 google_api_key=self.google_api_key,
                 temperature=0.1
             )

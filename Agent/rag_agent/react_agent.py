@@ -20,6 +20,209 @@ from Agent.tools.lazy_search_tools import (
     search_documents_lazy,
     search_specific_document_lazy
 )
+from Agent.rag_enhanced.family_aware_retriever import enhanced_search_documents
+
+def search_documents_with_metadata_fallback(query: str, top_k: int = 5, user_role: Optional[str] = None, user_institution_id: Optional[int] = None) -> str:
+    """Enhanced search with intelligent metadata fallback"""
+    logger.info(f"Enhanced search with metadata fallback for query: '{query}'")
+    
+    try:
+        # Step 1: Determine if this query should prioritize metadata search
+        query_lower = query.lower()
+        
+        # Keywords that indicate specific document/program names (should use metadata first)
+        metadata_priority_keywords = [
+            'indo-norwegian', 'incp2', 'unesco', 'cooperation programme', 
+            'call for applications', 'public notice', 'scholarship programme',
+            'stipendium hungaricum', 'michel batisse', 'hamdan prize'
+        ]
+        
+        should_prioritize_metadata = any(keyword in query_lower for keyword in metadata_priority_keywords)
+        
+        if should_prioritize_metadata:
+            logger.info("Query contains specific program/document names, prioritizing metadata search")
+            
+            # Try metadata search first for specific queries
+            metadata_result = _perform_metadata_search(query, top_k, user_role, user_institution_id)
+            if metadata_result and "No documents found" not in metadata_result:
+                logger.info("Metadata search successful for priority query")
+                return metadata_result
+        
+        # Step 2: Try enhanced vector search
+        vector_results = enhanced_search_documents(
+            query=query,
+            top_k=top_k,
+            user_role=user_role,
+            user_institution_id=user_institution_id,
+            prefer_latest=True
+        )
+        
+        # Step 3: Check if vector search found truly relevant results
+        if "No relevant documents found" not in vector_results and len(vector_results.strip()) > 50:
+            # Strict relevance check for vector results
+            query_words = [word.lower() for word in query.split() if len(word) > 3]
+            vector_lower = vector_results.lower()
+            
+            # Check for exact matches of important query terms
+            exact_matches = sum(1 for word in query_words if word in vector_lower)
+            
+            # For specific program names, require high precision
+            if should_prioritize_metadata:
+                required_match_ratio = 0.8  # 80% of words must match
+            else:
+                required_match_ratio = 0.4  # 40% for general queries
+            
+            if len(query_words) > 0 and (exact_matches / len(query_words)) >= required_match_ratio:
+                logger.info(f"Vector search successful ({exact_matches}/{len(query_words)} words matched)")
+                return vector_results
+            else:
+                logger.info(f"Vector search results not relevant ({exact_matches}/{len(query_words)} words matched), trying metadata search...")
+        else:
+            logger.info("Vector search failed, trying metadata-based search...")
+        
+        # Step 4: Fallback to metadata search
+        metadata_result = _perform_metadata_search(query, top_k, user_role, user_institution_id)
+        if metadata_result:
+            return metadata_result
+        
+        # Step 5: Last resort - return vector results even if not perfect
+        if "No relevant documents found" not in vector_results:
+            logger.info("Returning vector results as last resort")
+            return vector_results + "\n\n(Note: Results may not be perfectly relevant. Try different keywords if needed.)"
+        
+        return f"No documents found matching '{query}'. Try using different keywords or check the document title exactly."
+        
+    except Exception as e:
+        logger.error(f"Error in enhanced search with metadata fallback: {str(e)}")
+        return f"Error searching documents: {str(e)}"
+
+
+def _perform_metadata_search(query: str, top_k: int, user_role: Optional[str], user_institution_id: Optional[int]) -> str:
+    """Perform metadata-based search with BM25 ranking"""
+    from backend.database import SessionLocal, DocumentMetadata, Document
+    from sqlalchemy import or_, and_
+    from rank_bm25 import BM25Okapi
+    
+    db = SessionLocal()
+    
+    try:
+        query_words = query.lower().split()
+        
+        # Build query for metadata search
+        metadata_query = db.query(Document, DocumentMetadata).outerjoin(
+            DocumentMetadata, Document.id == DocumentMetadata.document_id
+        ).filter(
+            Document.approval_status.in_(['approved', 'pending'])
+        )
+        
+        # Apply role-based filters
+        from backend.constants.roles import DEVELOPER, MINISTRY_ADMIN, UNIVERSITY_ADMIN
+        if user_role == DEVELOPER:
+            pass  # Can access all
+        elif user_role == MINISTRY_ADMIN:
+            metadata_query = metadata_query.filter(
+                Document.visibility_level.in_(['public', 'restricted', 'institution_only'])
+            )
+        elif user_role == UNIVERSITY_ADMIN:
+            metadata_query = metadata_query.filter(
+                or_(
+                    Document.visibility_level == 'public',
+                    and_(
+                        Document.visibility_level.in_(['institution_only', 'restricted']),
+                        Document.institution_id == user_institution_id
+                    )
+                )
+            )
+        else:
+            filters = [Document.visibility_level == 'public']
+            if user_institution_id:
+                filters.append(
+                    and_(
+                        Document.visibility_level == 'institution_only',
+                        Document.institution_id == user_institution_id
+                    )
+                )
+            metadata_query = metadata_query.filter(or_(*filters))
+        
+        # Search in metadata fields with fuzzy matching
+        search_conditions = []
+        for word in query_words:
+            if len(word) > 2:  # Skip very short words
+                word_conditions = [
+                    DocumentMetadata.title.ilike(f'%{word}%'),
+                    DocumentMetadata.summary.ilike(f'%{word}%'),
+                    DocumentMetadata.bm25_keywords.ilike(f'%{word}%'),
+                    Document.filename.ilike(f'%{word}%')
+                ]
+                search_conditions.extend(word_conditions)
+        
+        if search_conditions:
+            metadata_query = metadata_query.filter(or_(*search_conditions))
+        
+        metadata_results = metadata_query.all()
+        
+        if not metadata_results:
+            return None
+        
+        # Rank results using BM25 on metadata
+        documents = []
+        corpus = []
+        
+        for doc, meta in metadata_results:
+            doc_dict = {
+                "doc": doc,
+                "meta": meta,
+                "id": doc.id,
+                "title": meta.title if meta and meta.title else doc.filename,
+                "filename": doc.filename
+            }
+            documents.append(doc_dict)
+            
+            # Create searchable text from metadata (handle None values)
+            title = meta.title if meta and meta.title else ""
+            summary = meta.summary if meta and meta.summary else ""
+            keywords = meta.bm25_keywords if meta and meta.bm25_keywords else ""
+            filename = doc.filename if doc.filename else ""
+            
+            searchable_text = f"{title} {summary} {keywords} {filename}".lower()
+            corpus.append(searchable_text.split())
+        
+        # Rank using BM25
+        bm25 = BM25Okapi(corpus)
+        query_tokens = query.lower().split()
+        bm25_scores = bm25.get_scores(query_tokens)
+        
+        # Sort by relevance score
+        ranked_indices = bm25_scores.argsort()[::-1]  # Descending order
+        top_results = [documents[i] for i in ranked_indices[:top_k]]
+        
+        # Format results
+        formatted = f"Found {len(top_results)} relevant results (metadata search):\n\n"
+        
+        for i, doc_dict in enumerate(top_results, 1):
+            doc = doc_dict['doc']
+            meta = doc_dict['meta']
+            score = bm25_scores[ranked_indices[i-1]]
+            
+            approval_badge = "Approved" if doc.approval_status == 'approved' else "Pending Approval"
+            
+            formatted += f"**Result {i}** (Relevance Score: {score:.2f}) [{approval_badge}]\n"
+            formatted += f"Source: {doc.filename}\n"
+            formatted += f"Document ID: {doc.id}\n"
+            formatted += f"Document: {meta.title if meta and meta.title else doc.filename}\n"
+            formatted += f"Approval Status: {doc.approval_status}\n"
+            formatted += f"Visibility: {doc.visibility_level}\n"
+            
+            if meta and meta.summary:
+                formatted += f"Summary: {meta.summary[:300]}...\n"
+            
+            formatted += "\n"
+        
+        logger.info(f"Metadata search returned {len(top_results)} results")
+        return formatted
+        
+    finally:
+        db.close()
 from Agent.tools.search_tools import get_document_metadata
 from Agent.tools.analysis_tools import compare_policies, summarize_document
 from Agent.tools.count_tools import count_documents_wrapper
@@ -95,7 +298,7 @@ class PolicyRAGAgent:
         
         # Initialize Gemini Flash with tool calling support
         self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.0-flash",
+            model="gemini-2.5-flash",
             google_api_key=google_api_key,
             temperature=temperature,
             streaming=False,  # Disable streaming for tool calling reliability
@@ -260,8 +463,8 @@ Be proactive and exhaustive in your search before concluding documents don't exi
         logger.info("PolicyRAGAgent initialized successfully")
     
     def _search_documents_wrapper(self, query: str) -> str:
-        """Wrapper to inject user context into search_documents_lazy"""
-        return search_documents_lazy(
+        """Wrapper to inject user context into enhanced search with metadata fallback"""
+        return search_documents_with_metadata_fallback(
             query=query,
             user_role=self.current_user_role,
             user_institution_id=self.current_user_institution_id

@@ -295,7 +295,7 @@ async def chat_health():
         rag_agent = get_agent()
         return {
             "status": "healthy",
-            "model": "gemini-2.0-flash-exp",
+            "model": "gemini-2.5-flash",
             "tools": len(rag_agent.tools)
         }
     except Exception as e:

@@ -20,7 +20,7 @@ class ComplianceChecker:
             google_api_key: Google API key for Gemini
         """
         genai.configure(api_key=google_api_key)
-        self.model = genai.GenerativeModel('gemini-2.0-flash')
+        self.model = genai.GenerativeModel('gemini-2.5-flash')
         logger.info("ComplianceChecker initialized with Gemini 2.0 Flash")
     
     def check_compliance(
