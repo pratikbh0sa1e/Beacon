@@ -371,13 +371,13 @@ class PolicyRAGAgent:
                     logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
                     return None
                 
-                logger.info("Initializing Gemini (gemini-1.5-flash) for RAG agent")
+                logger.info("Initializing Gemini (gemini-2.5-flash) for RAG agent")
                 return ChatGoogleGenerativeAI(
-                    model="gemini-1.5-flash",
+                    model="gemini-2.5-flash",
                     google_api_key=google_api_key,
                     temperature=temperature,
                     streaming=False,
-                    convert_system_message_to_human=False
+                    convert_system_message_to_human=True  # Important for Gemini
                 )
             
             elif provider == "openai":
@@ -529,6 +529,10 @@ CRITICAL RULES:
 3. After finding documents with list_documents, use search_specific_document to get detailed content
 4. Try multiple search strategies automatically before giving up
 5. Present results directly - don't ask permission to search
+6. **LANGUAGE RULE: ALWAYS respond in the SAME LANGUAGE as the user's question**
+   - If user asks in Hindi (हिंदी), respond in Hindi
+   - If user asks in English, respond in English
+   - Detect the language from the user's input and match it exactly
 
 SEARCH STRATEGY:
 - For specific queries: try search_documents with the main keywords
@@ -548,7 +552,9 @@ TOOL USAGE:
 IMPORTANT: list_documents only shows metadata (title, type, etc.). To answer questions about document content,
 you MUST use search_specific_document with the document ID to retrieve the actual content.
 
-Be proactive and exhaustive in your search before concluding documents don't exist."""),
+Be proactive and exhaustive in your search before concluding documents don't exist.
+
+REMEMBER: Match the user's language in your response!"""),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
