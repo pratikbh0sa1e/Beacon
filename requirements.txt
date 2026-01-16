@@ -17,6 +17,8 @@ langchainhub==0.1.21
 langchain-text-splitters==0.3.6
 langchain-community==0.3.17
 langsmith
+openai>=1.0.0  # For Grok API (xAI) - uses OpenAI-compatible interface
+langchain-openai==0.2.14  # LangChain OpenAI integration
 
 # ============================================
 # Web Framework & API

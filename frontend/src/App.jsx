@@ -43,7 +43,6 @@ import { DataSourceRequestPage } from "./pages/admin/DataSourceRequestPage";
 import { DataSourceApprovalPage } from "./pages/admin/DataSourceApprovalPage";
 import { ActiveSourcesPage } from "./pages/admin/ActiveSourcesPage";
 import { MyDataSourceRequestsPage } from "./pages/admin/MyDataSourceRequestsPage";
-import { WebScrapingPage } from "./pages/admin/WebScrapingPage";
 import { EnhancedWebScrapingPage } from "./pages/admin/EnhancedWebScrapingPage";
 
 // Bookmark Page
@@ -270,15 +269,6 @@ const App = () => {
 
             <Route
               path="web-scraping"
-              element={
-                <ProtectedRoute allowedRoles={ADMIN_ROLES}>
-                  <WebScrapingPage />
-                </ProtectedRoute>
-              }
-            />
-
-            <Route
-              path="web-scraping-enhanced"
               element={
                 <ProtectedRoute allowedRoles={ADMIN_ROLES}>
                   <EnhancedWebScrapingPage />

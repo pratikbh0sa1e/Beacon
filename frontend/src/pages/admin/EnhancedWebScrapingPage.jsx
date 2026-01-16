@@ -6,6 +6,7 @@ import {
   Plus,
   Play,
   Pause,
+  Square,
   Trash2,
   Eye,
   Pencil,
@@ -67,6 +68,7 @@ export const EnhancedWebScrapingPage = () => {
   const [previewData, setPreviewData] = useState(null);
   const [selectedFamily, setSelectedFamily] = useState(null);
   const [scrapingInProgress, setScrapingInProgress] = useState({});
+  const [scrapingJobIds, setScrapingJobIds] = useState({}); // NEW: Track job IDs
   const [searchKeyword, setSearchKeyword] = useState("");
   const [familyFilter, setFamilyFilter] = useState("");
   const [editingSource, setEditingSource] = useState(null);
@@ -141,6 +143,11 @@ export const EnhancedWebScrapingPage = () => {
 
       const result = response.data;
 
+      // Store job ID for stop functionality
+      if (result.job_id) {
+        setScrapingJobIds((prev) => ({ ...prev, [sourceId]: result.job_id }));
+      }
+
       // Show detailed results
       const successMsg = `Enhanced scraping complete!`;
       const details = [
@@ -166,6 +173,43 @@ export const EnhancedWebScrapingPage = () => {
       toast.error(error.response?.data?.detail || "Enhanced scraping failed");
     } finally {
       setScrapingInProgress((prev) => ({ ...prev, [sourceId]: false }));
+      setScrapingJobIds((prev) => {
+        const newJobIds = { ...prev };
+        delete newJobIds[sourceId];
+        return newJobIds;
+      });
+    }
+  };
+
+  const handleStopScraping = async (sourceId) => {
+    try {
+      const jobId = scrapingJobIds[sourceId];
+      if (!jobId) {
+        toast.error("No active scraping job found");
+        return;
+      }
+
+      toast.info("Stopping scraping...");
+
+      await api.post("/api/enhanced-web-scraping/stop-scraping", {
+        job_id: jobId,
+      });
+
+      toast.success("Scraping stopped successfully");
+
+      // Clear job tracking
+      setScrapingInProgress((prev) => ({ ...prev, [sourceId]: false }));
+      setScrapingJobIds((prev) => {
+        const newJobIds = { ...prev };
+        delete newJobIds[sourceId];
+        return newJobIds;
+      });
+
+      // Refresh data
+      fetchData();
+    } catch (error) {
+      console.error("Error stopping scraping:", error);
+      toast.error(error.response?.data?.detail || "Failed to stop scraping");
     }
   };
 
@@ -633,20 +677,26 @@ export const EnhancedWebScrapingPage = () => {
                         </div>
 
                         <div className="flex gap-2">
-                          <Button
-                            size="sm"
-                            onClick={() => handleEnhancedScrape(source.id)}
-                            disabled={scrapingInProgress[source.id]}
-                          >
-                            {scrapingInProgress[source.id] ? (
-                              <LoadingSpinner className="h-4 w-4" />
-                            ) : (
-                              <>
-                                <Zap className="h-4 w-4 mr-1" />
-                                Enhanced
-                              </>
-                            )}
-                          </Button>
+                          {scrapingInProgress[source.id] ? (
+                            // Show stop button when scraping
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleStopScraping(source.id)}
+                            >
+                              <Square className="h-4 w-4 mr-1" />
+                              Stop
+                            </Button>
+                          ) : (
+                            // Show scrape button when not scraping
+                            <Button
+                              size="sm"
+                              onClick={() => handleEnhancedScrape(source.id)}
+                            >
+                              <Zap className="h-4 w-4 mr-1" />
+                              Enhanced
+                            </Button>
+                          )}
                           {/* ... other buttons ... */}
                         </div>
                       </div>

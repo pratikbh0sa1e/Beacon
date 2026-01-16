@@ -3,6 +3,7 @@ import logging
 from typing import List, Dict
 from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 import os
 
 # Setup logging
@@ -21,35 +22,73 @@ logger = logging.getLogger(__name__)
 class DocumentReranker:
     """Rerank documents based on query relevance"""
     
-    def __init__(self, provider: str = "gemini", google_api_key: str = None):
+    def __init__(self, provider: str = None, google_api_key: str = None):
         """
-        Initialize reranker
+        Initialize reranker with multi-provider support
         
         Args:
-            provider: "gemini" or "local" (for future local model support)
+            provider: LLM provider ("openrouter", "gemini", "local") - defaults to env RERANKER_PROVIDER
             google_api_key: Google API key (required for gemini provider)
         """
-        self.provider = provider
+        # Get provider from parameter or environment
+        self.provider = provider or os.getenv("RERANKER_PROVIDER", "gemini")
         self.google_api_key = google_api_key or os.getenv("GOOGLE_API_KEY")
         
-        if provider == "gemini":
-            if not self.google_api_key:
-                raise ValueError("Google API key required for Gemini reranker")
-            
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
-                google_api_key=self.google_api_key,
-                temperature=0.1
-            )
-            logger.info("Reranker initialized with Gemini")
+        # Initialize LLM
+        self.llm = self._initialize_llm()
         
-        elif provider == "local":
-            # Placeholder for future local model implementation
-            logger.warning("Local reranker not yet implemented - falling back to simple scoring")
-            self.llm = None
-        
+        if self.llm:
+            logger.info(f"Reranker initialized with provider: {self.provider}")
         else:
-            raise ValueError(f"Unknown provider: {provider}")
+            logger.warning(f"Reranker provider '{self.provider}' not available, using simple scoring")
+    
+    def _initialize_llm(self):
+        """Initialize LLM based on provider"""
+        try:
+            if self.provider == "openrouter":
+                openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+                if not openrouter_api_key:
+                    logger.warning("OPENROUTER_API_KEY not found - OpenRouter unavailable")
+                    return None
+                
+                model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+                
+                logger.info(f"Initializing OpenRouter reranker with model: {model}")
+                return ChatOpenAI(
+                    model=model,
+                    api_key=openrouter_api_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    temperature=0.1,
+                    default_headers={
+                        "HTTP-Referer": "https://github.com/your-repo",
+                        "X-Title": "Document Reranker"
+                    }
+                )
+            
+            elif self.provider == "gemini":
+                if not self.google_api_key:
+                    logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
+                    return None
+                
+                logger.info("Initializing Gemini (gemini-1.5-flash) reranker")
+                return ChatGoogleGenerativeAI(
+                    model="gemini-1.5-flash",
+                    google_api_key=self.google_api_key,
+                    temperature=0.1
+                )
+            
+            elif self.provider == "local":
+                # Placeholder for future local model implementation
+                logger.info("Local reranker selected - will use simple scoring")
+                return None
+            
+            else:
+                logger.error(f"Unknown provider: {self.provider}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error initializing {self.provider}: {str(e)}")
+            return None
     
     def rerank(self, query: str, documents: List[Dict], top_k: int = 5) -> List[Dict]:
         """
@@ -65,15 +104,13 @@ class DocumentReranker:
         """
         logger.info(f"Reranking {len(documents)} documents for query: '{query[:50]}...'")
         
-        if self.provider == "gemini":
-            return self._gemini_rerank(query, documents, top_k)
-        elif self.provider == "local":
-            return self._simple_rerank(query, documents, top_k)
+        if self.llm and self.provider in ["gemini", "openrouter"]:
+            return self._llm_rerank(query, documents, top_k)
         else:
-            return documents[:top_k]
+            return self._simple_rerank(query, documents, top_k)
     
-    def _gemini_rerank(self, query: str, documents: List[Dict], top_k: int) -> List[Dict]:
-        """Rerank using Gemini LLM"""
+    def _llm_rerank(self, query: str, documents: List[Dict], top_k: int) -> List[Dict]:
+        """Rerank using LLM (Gemini or OpenRouter)"""
         try:
             # Format documents for LLM
             doc_list = []
@@ -109,7 +146,7 @@ Format: [id1, id2, id3, ...]
 
 Example: If available IDs are [17, 18, 19, 20, 21] and you want to rank them, return something like: [20, 18, 21, 17, 19]"""
 
-            logger.info("Calling Gemini for reranking...")
+            logger.info(f"Calling {self.provider} for reranking...")
             response = self.llm.invoke(prompt)
             
             # Parse response
@@ -123,7 +160,7 @@ Example: If available IDs are [17, 18, 19, 20, 21] and you want to rank them, re
                 end = response_text.rindex(']') + 1
                 ranked_ids = json.loads(response_text[start:end])
                 
-                logger.info(f"Gemini returned {len(ranked_ids)} document IDs: {ranked_ids}")
+                logger.info(f"{self.provider} returned {len(ranked_ids)} document IDs: {ranked_ids}")
                 
                 # Reorder documents based on ranked IDs
                 id_to_doc = {doc['id']: doc for doc in documents}
@@ -134,11 +171,11 @@ Example: If available IDs are [17, 18, 19, 20, 21] and you want to rank them, re
                     if doc_id in id_to_doc:
                         reranked.append(id_to_doc[doc_id])
                     else:
-                        logger.warning(f"Document ID {doc_id} from Gemini not found in available documents")
+                        logger.warning(f"Document ID {doc_id} from {self.provider} not found in available documents")
                 
                 if not reranked:
                     logger.warning("No matching documents after reranking, falling back to original order")
-                    logger.warning(f"Gemini returned IDs: {ranked_ids}, but available IDs are: {list(id_to_doc.keys())}")
+                    logger.warning(f"{self.provider} returned IDs: {ranked_ids}, but available IDs are: {list(id_to_doc.keys())}")
                     return documents[:top_k]
                 
                 # If we got fewer documents than requested, add remaining from original list
@@ -156,7 +193,7 @@ Example: If available IDs are [17, 18, 19, 20, 21] and you want to rank them, re
                 return documents[:top_k]
             
         except Exception as e:
-            logger.error(f"Error in Gemini reranking: {str(e)}")
+            logger.error(f"Error in {self.provider} reranking: {str(e)}")
             return documents[:top_k]
     
     def _simple_rerank(self, query: str, documents: List[Dict], top_k: int) -> List[Dict]:

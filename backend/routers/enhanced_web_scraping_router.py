@@ -4,6 +4,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional, Dict
 from pydantic import BaseModel
 import logging
+import threading
+import uuid
+from datetime import datetime
 
 from backend.database import get_db, Document, DocumentFamily, WebScrapingSource, User
 from backend.routers.auth_router import get_current_user
@@ -13,6 +16,11 @@ from Agent.document_families.family_manager import DocumentFamilyManager
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/enhanced-web-scraping", tags=["Enhanced Web Scraping"])
+
+# Global job tracking
+active_jobs = {}
+job_stop_flags = {}
+job_lock = threading.Lock()
 
 
 def require_admin(current_user: User):
@@ -73,24 +81,54 @@ async def scrape_source_enhanced(
         if not source:
             raise HTTPException(status_code=404, detail="Source not found")
         
-        # Run enhanced scraping
+        # Generate job ID
+        job_id = str(uuid.uuid4())
+        
+        # Register job
+        with job_lock:
+            active_jobs[job_id] = {
+                "source_id": request.source_id,
+                "source_name": source.name,
+                "status": "running",
+                "started_at": datetime.now().isoformat(),
+                "user_id": current_user.id
+            }
+            job_stop_flags[job_id] = False
+        
+        logger.info(f"Started scraping job {job_id} for source {source.name}")
+        
+        # Run enhanced scraping with stop flag
         result = enhanced_scrape_source(
             source_id=request.source_id,
             keywords=request.keywords,
             max_documents=request.max_documents,
             pagination_enabled=request.pagination_enabled,
             max_pages=request.max_pages,
-            incremental=request.incremental
+            incremental=request.incremental,
+            stop_flag=lambda: job_stop_flags.get(job_id, False)
         )
+        
+        # Update job status
+        with job_lock:
+            if job_id in active_jobs:
+                active_jobs[job_id]["status"] = "completed"
+                active_jobs[job_id]["completed_at"] = datetime.now().isoformat()
         
         return {
             "status": "success",
+            "job_id": job_id,
             "message": f"Enhanced scraping completed for {source.name}",
             **result
         }
         
     except Exception as e:
         logger.error(f"Enhanced scraping failed: {str(e)}")
+        # Update job status on error
+        if 'job_id' in locals():
+            with job_lock:
+                if job_id in active_jobs:
+                    active_jobs[job_id]["status"] = "failed"
+                    active_jobs[job_id]["error"] = str(e)
         raise HTTPException(status_code=500, detail=str(e))
 
 
@@ -320,26 +358,55 @@ async def stop_scraping(
     require_admin(current_user)
     
     try:
-        source_id = request.get("source_id")
         job_id = request.get("job_id")
         
-        if not source_id or not job_id:
-            raise HTTPException(status_code=400, detail="source_id and job_id are required")
+        if not job_id:
+            raise HTTPException(status_code=400, detail="job_id is required")
         
-        # For now, we'll just return success since we don't have persistent job tracking
-        # In a production system, you'd track active jobs and cancel them
-        logger.info(f"Stop scraping requested for source {source_id}, job {job_id}")
+        # Set stop flag
+        with job_lock:
+            if job_id not in active_jobs:
+                raise HTTPException(status_code=404, detail="Job not found or already completed")
+            
+            if active_jobs[job_id]["status"] != "running":
+                return {
+                    "status": "already_stopped",
+                    "message": f"Job {job_id} is not running (status: {active_jobs[job_id]['status']})"
+                }
+            
+            # Set stop flag
+            job_stop_flags[job_id] = True
+            active_jobs[job_id]["status"] = "stopping"
+            active_jobs[job_id]["stopped_at"] = datetime.now().isoformat()
+        
+        logger.info(f"Stop flag set for job {job_id}")
         
         return {
             "status": "success",
-            "message": f"Scraping job {job_id} for source {source_id} stopped",
-            "source_id": source_id,
+            "message": f"Scraping job {job_id} is being stopped",
             "job_id": job_id
         }
         
+    except HTTPException:
+        raise
     except Exception as e:
         logger.error(f"Error stopping scraping: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/active-jobs")
+async def get_active_jobs(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
+    """Get list of active scraping jobs"""
+    require_admin(current_user)
+    
+    with job_lock:
+        return {
+            "active_jobs": list(active_jobs.values()),
+            "total_active": len([j for j in active_jobs.values() if j["status"] == "running"])
+        }
 
 
 @router.get("/available-scrapers")

@@ -79,12 +79,6 @@ const menuItems = [
     roles: ADMIN_ROLES,
   },
   {
-    icon: Globe,
-    label: "Enhanced Web Scraping",
-    path: "/admin/web-scraping-enhanced",
-    roles: ADMIN_ROLES,
-  },
-  {
     icon: Settings,
     label: "System Health",
     path: "/admin/system",

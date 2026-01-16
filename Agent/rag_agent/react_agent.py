@@ -1,5 +1,6 @@
 """ReAct agent with LangGraph for policy Q&A"""
 import logging
+import os
 from typing import TypedDict, Annotated, Sequence, AsyncGenerator, List
 from pathlib import Path
 import operator
@@ -9,6 +10,7 @@ import asyncio
 from langgraph.graph import StateGraph, END
 from langgraph.checkpoint.memory import MemorySaver
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain.tools import Tool, StructuredTool
 from langchain.agents import AgentExecutor, create_tool_calling_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -288,7 +290,7 @@ class PolicyRAGAgent:
     
     def __init__(self, google_api_key: str, temperature: float = 0.1):
         """
-        Initialize the RAG agent
+        Initialize the RAG agent with multi-provider support
         
         Args:
             google_api_key: Google API key for Gemini
@@ -296,19 +298,125 @@ class PolicyRAGAgent:
         """
         logger.info("Initializing PolicyRAGAgent")
         
-        # Initialize Gemini Flash with tool calling support
-        self.llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=google_api_key,
-            temperature=temperature,
-            streaming=False,  # Disable streaming for tool calling reliability
-            convert_system_message_to_human=False  # Keep system messages for better tool calling
-        )
+        # Get provider from environment
+        provider = os.getenv("RAG_LLM_PROVIDER", "gemini")
+        fallback_provider = os.getenv("RAG_FALLBACK_PROVIDER", "gemini")
+        
+        # Initialize primary LLM
+        self.llm = self._initialize_llm(provider, google_api_key, temperature)
+        
+        # Initialize fallback LLM if different from primary
+        self.fallback_llm = None
+        if fallback_provider != provider:
+            self.fallback_llm = self._initialize_llm(fallback_provider, google_api_key, temperature)
+        
+        if self.llm:
+            logger.info(f"RAG agent initialized with primary LLM: {provider}")
+            if self.fallback_llm:
+                logger.info(f"Fallback LLM configured: {fallback_provider}")
+        else:
+            logger.error("Failed to initialize RAG agent LLM")
+            raise ValueError(f"Could not initialize LLM provider: {provider}")
         
         # User context for role-based access (will be set per query)
         self.current_user_role = None
         self.current_user_institution_id = None
         
+        # Setup tools and agent
+        self._setup_tools()
+        
+        # Setup LangGraph with memory
+        self.memory = MemorySaver()
+        self.graph = self._create_graph()
+        
+        logger.info("PolicyRAGAgent initialized successfully")
+    
+    def _initialize_llm(self, provider: str, google_api_key: str, temperature: float):
+        """
+        Initialize LLM based on provider
+        
+        Args:
+            provider: LLM provider ("openrouter", "gemini", "openai")
+            google_api_key: Google API key for Gemini
+            temperature: LLM temperature
+        
+        Returns:
+            Initialized LLM instance
+        """
+        try:
+            if provider == "openrouter":
+                openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
+                if not openrouter_api_key:
+                    logger.warning("OPENROUTER_API_KEY not found - OpenRouter unavailable")
+                    return None
+                
+                # Get model from env or use default
+                model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+                
+                logger.info(f"Initializing OpenRouter with model: {model}")
+                return ChatOpenAI(
+                    model=model,
+                    api_key=openrouter_api_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    temperature=temperature,
+                    streaming=False,  # Disable streaming for tool calling reliability
+                    default_headers={
+                        "HTTP-Referer": "https://github.com/your-repo",
+                        "X-Title": "Policy RAG Agent"
+                    }
+                )
+            
+            elif provider == "gemini":
+                if not google_api_key:
+                    logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
+                    return None
+                
+                logger.info("Initializing Gemini (gemini-1.5-flash) for RAG agent")
+                return ChatGoogleGenerativeAI(
+                    model="gemini-1.5-flash",
+                    google_api_key=google_api_key,
+                    temperature=temperature,
+                    streaming=False,
+                    convert_system_message_to_human=False
+                )
+            
+            elif provider == "openai":
+                openai_api_key = os.getenv("OPENAI_API_KEY")
+                if not openai_api_key:
+                    logger.warning("OPENAI_API_KEY not found - OpenAI unavailable")
+                    return None
+                
+                logger.info("Initializing OpenAI for RAG agent")
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
+                    api_key=openai_api_key,
+                    temperature=temperature,
+                    streaming=False
+                )
+            
+            elif provider == "ollama":
+                ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2")
+                
+                logger.info(f"Initializing Ollama for RAG agent with model: {ollama_model}")
+                return ChatOpenAI(
+                    model=ollama_model,
+                    base_url=f"{ollama_base_url}/v1",
+                    api_key="ollama",  # Ollama doesn't need real API key
+                    temperature=temperature,
+                    streaming=False
+                )
+            
+            else:
+                logger.error(f"Unknown provider: {provider}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error initializing {provider}: {str(e)}")
+            return None
+    
+    def _setup_tools(self):
+        """Setup agent tools and create agent executor"""
         # Define input schemas for structured tools
         class CountDocumentsInput(BaseModel):
             language: Optional[str] = Field(None, description="Filter by language (e.g., 'Hindi', 'English')")
@@ -455,12 +563,6 @@ Be proactive and exhaustive in your search before concluding documents don't exi
             max_execution_time=60,  # Increased timeout for embedding operations
             return_intermediate_steps=True
         )
-        
-        # Setup LangGraph with memory
-        self.memory = MemorySaver()
-        self.graph = self._create_graph()
-        
-        logger.info("PolicyRAGAgent initialized successfully")
     
     def _search_documents_wrapper(self, query: str) -> str:
         """Wrapper to inject user context into enhanced search with metadata fallback"""

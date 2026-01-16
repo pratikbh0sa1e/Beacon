@@ -450,11 +450,15 @@ def enhanced_scrape_source(
     max_documents: int = 1500,
     pagination_enabled: bool = True,
     max_pages: int = 100,
-    incremental: bool = True
+    incremental: bool = True,
+    stop_flag: Optional[callable] = None
 ) -> Dict:
     """
     Enhanced scraping function that saves documents to database
     Uses the new enhanced scraping orchestrator with database storage
+    
+    Args:
+        stop_flag: Callable that returns True if scraping should stop
     """
     logger.info(f"Using enhanced scraping with database storage for source {source_id}")
     
@@ -475,9 +479,38 @@ def enhanced_scrape_source(
         
         logger.info(f"Starting enhanced scraping for {source.name}")
         
-        # Use site-specific scraper
+        # Check stop flag before starting
+        if stop_flag and stop_flag():
+            logger.info("Scraping stopped before starting")
+            return {
+                "status": "stopped",
+                "message": "Scraping was stopped",
+                "documents_discovered": 0,
+                "documents_new": 0
+            }
+        
+        # Use site-specific scraper based on source URL
         from .site_scrapers import get_scraper_for_site
-        scraper = get_scraper_for_site("moe")  # Default to MoE for now
+        
+        # Detect scraper type from source URL
+        source_url_lower = source.url.lower()
+        if 'ugc.gov.in' in source_url_lower or 'ugc' in source.name.lower():
+            scraper_type = "ugc"
+            logger.info(f"Using UGC scraper for {source.name}")
+        elif 'aicte' in source_url_lower or 'aicte' in source.name.lower():
+            scraper_type = "aicte"
+            logger.info(f"Using AICTE scraper for {source.name}")
+        elif 'education.gov.in' in source_url_lower or 'moe' in source.name.lower() or 'ministry of education' in source.name.lower():
+            scraper_type = "moe"
+            logger.info(f"Using MoE scraper for {source.name}")
+        elif 'ncert' in source_url_lower or 'ncert' in source.name.lower():
+            scraper_type = "ncert"
+            logger.info(f"Using NCERT scraper for {source.name}")
+        else:
+            scraper_type = "generic"
+            logger.info(f"Using generic scraper for {source.name}")
+        
+        scraper = get_scraper_for_site(scraper_type)
         
         # Initialize stats
         stats = {
@@ -487,6 +520,7 @@ def enhanced_scrape_source(
             "documents_unchanged": 0,
             "documents_duplicate": 0,
             "documents_processed": 0,
+            "documents_failed_metadata": 0,  # NEW: Documents deleted due to metadata failure
             "pages_scraped": 0,
             "errors": []
         }
@@ -515,6 +549,11 @@ def enhanced_scrape_source(
                 
                 pages_scraped = 1
                 for page_url in pagination_links:
+                    # Check stop flag
+                    if stop_flag and stop_flag():
+                        logger.info(f"Scraping stopped by user during pagination after {pages_scraped} pages")
+                        break
+                    
                     if pages_scraped >= max_pages:
                         break
                     
@@ -548,6 +587,12 @@ def enhanced_scrape_source(
             # ✅ FIXED: Process all documents up to max_documents (removed 10-doc limit)
             processed_count = 0
             for doc_info in documents[:max_documents]:  # ✅ No more hard-coded limit!
+                # Check stop flag
+                if stop_flag and stop_flag():
+                    logger.info(f"Scraping stopped by user after processing {processed_count} documents")
+                    stats["status"] = "stopped"
+                    break
+                
                 if processed_count >= max_documents:
                     break
                 
@@ -583,8 +628,31 @@ def enhanced_scrape_source(
                         
                         # Save temporarily for text extraction and permanent storage
                         import tempfile
+                        import re
                         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                        safe_filename = doc_info['title'][:100].replace('/', '_').replace('\\', '_')
+                        
+                        # Better filename sanitization - remove ALL invalid characters
+                        safe_filename = doc_info['title'][:100]
+                        # Remove or replace invalid characters for Supabase storage
+                        safe_filename = safe_filename.replace(':', '-')  # Colons to dashes
+                        safe_filename = safe_filename.replace('"', '')   # Remove quotes
+                        safe_filename = safe_filename.replace("'", '')   # Remove single quotes
+                        safe_filename = safe_filename.replace('/', '_')  # Slashes to underscores
+                        safe_filename = safe_filename.replace('\\', '_') # Backslashes to underscores
+                        safe_filename = safe_filename.replace('?', '')   # Remove question marks
+                        safe_filename = safe_filename.replace('*', '')   # Remove asterisks
+                        safe_filename = safe_filename.replace('<', '')   # Remove less than
+                        safe_filename = safe_filename.replace('>', '')   # Remove greater than
+                        safe_filename = safe_filename.replace('|', '')   # Remove pipes
+                        safe_filename = safe_filename.replace('\n', ' ') # Newlines to spaces
+                        safe_filename = safe_filename.replace('\r', ' ') # Carriage returns to spaces
+                        safe_filename = re.sub(r'\s+', ' ', safe_filename)  # Multiple spaces to single
+                        safe_filename = safe_filename.strip()  # Remove leading/trailing spaces
+                        
+                        # Ensure filename is not empty
+                        if not safe_filename:
+                            safe_filename = f"document_{timestamp}"
+                        
                         unique_filename = f"scraped_{timestamp}_{safe_filename}.{doc_info.get('file_type', 'pdf')}"
                         
                         # Create temp file for processing
@@ -637,44 +705,101 @@ def enhanced_scrape_source(
                     db.add(document)
                     db.flush()  # Get document ID
                     
-                    # Create initial metadata (following normal workflow exactly)
-                    doc_metadata = DocumentMetadata(
-                        document_id=document.id,
-                        title=doc_info['title'][:500] if doc_info['title'] else 'Unknown Document',
-                        department="General",  # Will be updated by AI background task
-                        document_type="Uncategorized",  # Will be updated by AI background task
-                        text_length=len(extracted_text),
-                        metadata_status='processing',  # Will be updated by background task
-                        embedding_status='uploaded'
-                    )
+                    # ✅ NEW: Enhanced metadata extraction with quality check and fallback
+                    metadata_extraction_success = False
+                    used_fallback = False
                     
-                    db.add(doc_metadata)
-                    db.commit()  # Commit before background task
-                    
-                    # Run metadata extraction in the same way as normal uploads
                     try:
-                        logger.info(f"Running metadata extraction for scraped document: {document.id}")
+                        logger.info(f"Running enhanced metadata extraction for document: {document.id}")
                         
-                        # Import the exact same function used in normal uploads
-                        from backend.routers.document_router import extract_metadata_background
-                        from backend.database import SessionLocal as BGSessionLocal
+                        # Extract metadata using MetadataExtractor (with Grok/Gemini fallback)
+                        metadata_dict = metadata_extractor.extract_metadata(extracted_text, unique_filename)
                         
-                        # Create new session for background task (same as normal workflow)
-                        bg_db = BGSessionLocal()
+                        # Validate metadata quality
+                        is_valid, reason = metadata_extractor.validate_metadata_quality(metadata_dict)
                         
-                        # Run the exact same background task function
-                        extract_metadata_background(document.id, extracted_text, document.filename, bg_db)
+                        if not is_valid:
+                            logger.warning(f"Metadata quality check failed: {reason}")
+                            
+                            # Check if we should delete documents without metadata
+                            delete_without_metadata = os.getenv("DELETE_DOCS_WITHOUT_METADATA", "true").lower() == "true"
+                            
+                            if delete_without_metadata:
+                                logger.warning(f"Deleting document {document.id} due to failed metadata extraction")
+                                
+                                # Delete from Supabase storage
+                                try:
+                                    from backend.utils.supabase_storage import delete_from_supabase
+                                    delete_from_supabase(unique_filename)
+                                except Exception as e:
+                                    logger.error(f"Error deleting from Supabase: {e}")
+                                
+                                # Delete from database
+                                db.delete(document)
+                                db.commit()
+                                
+                                stats["documents_failed_metadata"] += 1
+                                continue  # Skip to next document
+                            else:
+                                logger.info("DELETE_DOCS_WITHOUT_METADATA=false, keeping document with poor metadata")
+                        else:
+                            metadata_extraction_success = True
+                            logger.info(f"Metadata extraction successful: {metadata_dict.get('title', 'No title')}")
                         
-                        logger.info(f"Metadata extraction completed for document {document.id}")
+                        # Create metadata record
+                        doc_metadata = DocumentMetadata(
+                            document_id=document.id,
+                            title=metadata_dict.get('title', doc_info['title'])[:500] if metadata_dict.get('title') else doc_info['title'][:500],
+                            department=metadata_dict.get('department', 'General'),
+                            document_type=metadata_dict.get('document_type', 'Uncategorized'),
+                            summary=metadata_dict.get('summary'),
+                            keywords=metadata_dict.get('keywords', []),
+                            key_topics=metadata_dict.get('key_topics', []),
+                            entities=metadata_dict.get('entities'),
+                            bm25_keywords=metadata_dict.get('bm25_keywords'),
+                            text_length=len(extracted_text),
+                            metadata_status='ready',
+                            embedding_status='uploaded'
+                        )
+                        
+                        db.add(doc_metadata)
+                        db.commit()
+                        
+                        logger.info(f"Metadata saved for document {document.id}")
                         
                     except Exception as e:
                         logger.error(f"Error in metadata extraction for {document.id}: {e}")
-                        # Update status to ready even if extraction fails
-                        try:
-                            doc_metadata.metadata_status = 'ready'
+                        
+                        # Check if we should delete documents without metadata
+                        delete_without_metadata = os.getenv("DELETE_DOCS_WITHOUT_METADATA", "true").lower() == "true"
+                        
+                        if delete_without_metadata:
+                            logger.warning(f"Deleting document {document.id} due to metadata extraction error")
+                            
+                            # Delete from Supabase storage
+                            try:
+                                from backend.utils.supabase_storage import delete_from_supabase
+                                delete_from_supabase(unique_filename)
+                            except Exception as e:
+                                logger.error(f"Error deleting from Supabase: {e}")
+                            
+                            # Delete from database
+                            db.delete(document)
                             db.commit()
-                        except:
-                            pass
+                            
+                            stats["documents_failed_metadata"] += 1
+                            continue  # Skip to next document
+                        else:
+                            # Create basic metadata as fallback
+                            doc_metadata = DocumentMetadata(
+                                document_id=document.id,
+                                title=doc_info['title'][:500],
+                                text_length=len(extracted_text),
+                                metadata_status='ready',
+                                embedding_status='uploaded'
+                            )
+                            db.add(doc_metadata)
+                            db.commit()
                     
                     stats["documents_new"] += 1
                     processed_count += 1

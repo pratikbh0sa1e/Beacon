@@ -6,6 +6,7 @@ from pathlib import Path
 from datetime import datetime
 from sklearn.feature_extraction.text import TfidfVectorizer
 from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 import os
 
 # Setup logging
@@ -25,25 +26,135 @@ logger = logging.getLogger(__name__)
 class MetadataExtractor:
     """Extract metadata from documents without full embedding"""
     
-    def __init__(self, google_api_key: Optional[str] = None):
+    def __init__(
+        self, 
+        provider: Optional[str] = None,
+        google_api_key: Optional[str] = None,
+        xai_api_key: Optional[str] = None,
+        openai_api_key: Optional[str] = None,
+        openrouter_api_key: Optional[str] = None
+    ):
         """
-        Initialize metadata extractor
+        Initialize metadata extractor with multi-provider support
         
         Args:
-            google_api_key: Google API key for LLM-based extraction
+            provider: LLM provider ("openrouter", "grok", "gemini", "openai") - defaults to env METADATA_LLM_PROVIDER
+            google_api_key: Google API key for Gemini
+            xai_api_key: xAI API key for Grok
+            openai_api_key: OpenAI API key
+            openrouter_api_key: OpenRouter API key
         """
-        self.google_api_key = google_api_key or os.getenv("GOOGLE_API_KEY")
-        self.llm = None
+        # Get provider from parameter or environment
+        self.provider = provider or os.getenv("METADATA_LLM_PROVIDER", "gemini")
+        self.fallback_provider = os.getenv("METADATA_FALLBACK_PROVIDER", "gemini")
         
-        if self.google_api_key:
-            self.llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
-                google_api_key=self.google_api_key,
-                temperature=0.1
-            )
-            logger.info("Metadata extractor initialized with LLM support")
+        # Get API keys
+        self.google_api_key = google_api_key or os.getenv("GOOGLE_API_KEY")
+        self.xai_api_key = xai_api_key or os.getenv("XAI_API_KEY")
+        self.openai_api_key = openai_api_key or os.getenv("OPENAI_API_KEY")
+        self.openrouter_api_key = openrouter_api_key or os.getenv("OPENROUTER_API_KEY")
+        
+        # Initialize LLMs
+        self.llm = None
+        self.fallback_llm = None
+        
+        # Initialize primary LLM
+        self.llm = self._initialize_llm(self.provider)
+        
+        # Initialize fallback LLM if different from primary
+        if self.fallback_provider != self.provider:
+            self.fallback_llm = self._initialize_llm(self.fallback_provider)
+        
+        if self.llm:
+            logger.info(f"Metadata extractor initialized with primary LLM: {self.provider}")
+            if self.fallback_llm:
+                logger.info(f"Fallback LLM configured: {self.fallback_provider}")
         else:
-            logger.warning("No Google API key provided - LLM extraction disabled")
+            logger.warning("No LLM provider configured - metadata extraction will be limited")
+    
+    def _initialize_llm(self, provider: str):
+        """Initialize LLM based on provider"""
+        try:
+            if provider == "openrouter":
+                if not self.openrouter_api_key:
+                    logger.warning("OPENROUTER_API_KEY not found - OpenRouter unavailable")
+                    return None
+                
+                # Get model from env or use default
+                model = os.getenv("OPENROUTER_MODEL", "meta-llama/llama-3.3-70b-instruct:free")
+                
+                logger.info(f"Initializing OpenRouter with model: {model}")
+                return ChatOpenAI(
+                    model=model,
+                    api_key=self.openrouter_api_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    temperature=0.1,
+                    max_tokens=2000,
+                    default_headers={
+                        "HTTP-Referer": "https://github.com/your-repo",  # Optional: for rankings
+                        "X-Title": "Document Metadata Extractor"  # Optional: show in rankings
+                    }
+                )
+            
+            elif provider == "grok":
+                if not self.xai_api_key:
+                    logger.warning("XAI_API_KEY not found - Grok unavailable")
+                    return None
+                
+                logger.info("Initializing Grok (xAI) for metadata extraction")
+                return ChatOpenAI(
+                    model="grok-beta",
+                    api_key=self.xai_api_key,
+                    base_url="https://api.x.ai/v1",
+                    temperature=0.1,
+                    max_tokens=2000
+                )
+            
+            elif provider == "gemini":
+                if not self.google_api_key:
+                    logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
+                    return None
+                
+                logger.info("Initializing Gemini (gemma-3-12b) for metadata extraction")
+                return ChatGoogleGenerativeAI(
+                    model="gemma-3-12b",
+                    google_api_key=self.google_api_key,
+                    temperature=0.1
+                )
+            
+            elif provider == "openai":
+                if not self.openai_api_key:
+                    logger.warning("OPENAI_API_KEY not found - OpenAI unavailable")
+                    return None
+                
+                logger.info("Initializing OpenAI for metadata extraction")
+                return ChatOpenAI(
+                    model="gpt-4o-mini",
+                    api_key=self.openai_api_key,
+                    temperature=0.1,
+                    max_tokens=2000
+                )
+            
+            elif provider == "ollama":
+                ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+                ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2")
+                
+                logger.info(f"Initializing Ollama with model: {ollama_model}")
+                return ChatOpenAI(
+                    model=ollama_model,
+                    base_url=f"{ollama_base_url}/v1",
+                    api_key="ollama",  # Ollama doesn't need real API key
+                    temperature=0.1,
+                    max_tokens=2000
+                )
+            
+            else:
+                logger.error(f"Unknown provider: {provider}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"Error initializing {provider}: {str(e)}")
+            return None
     
     def extract_metadata(self, text: str, filename: str) -> Dict:
         """
@@ -200,10 +311,19 @@ class MetadataExtractor:
             logger.error(f"Error extracting TF-IDF keywords: {str(e)}")
             return []
     
-    def _llm_extract_metadata(self, text: str, filename: str) -> Dict:
-        """Use LLM to extract rich metadata"""
-        try:
-            prompt = f"""Analyze this document and extract metadata in JSON format.
+    def _llm_extract_metadata(self, text: str, filename: str, retry_with_fallback: bool = True) -> Dict:
+        """
+        Use LLM to extract rich metadata with automatic fallback
+        
+        Args:
+            text: Document text
+            filename: Document filename
+            retry_with_fallback: If True, retry with fallback LLM on failure
+        
+        Returns:
+            Dictionary with extracted metadata
+        """
+        prompt = f"""Analyze this document and extract metadata in JSON format.
 
 Document: {filename}
 Text: {text[:2000]}
@@ -218,21 +338,94 @@ Extract and return ONLY valid JSON:
     "entities": {{"departments": [], "locations": [], "people": []}}
 }}"""
 
-            logger.info("Calling LLM for metadata extraction...")
-            response = self.llm.invoke(prompt)
-            
-            import json
-            response_text = response.content.strip()
-            
-            if response_text.startswith("```"):
-                response_text = response_text.split("```")[1]
-                if response_text.startswith("json"):
-                    response_text = response_text[4:]
-            
-            metadata = json.loads(response_text)
-            logger.info("LLM metadata extraction successful")
-            return metadata
-            
-        except Exception as e:
-            logger.error(f"Error in LLM metadata extraction: {str(e)}")
-            return {}
+        # Try primary LLM
+        if self.llm:
+            try:
+                logger.info(f"Calling primary LLM ({self.provider}) for metadata extraction...")
+                response = self.llm.invoke(prompt)
+                
+                import json
+                response_text = response.content.strip()
+                
+                # Clean up response
+                if response_text.startswith("```"):
+                    response_text = response_text.split("```")[1]
+                    if response_text.startswith("json"):
+                        response_text = response_text[4:]
+                
+                metadata = json.loads(response_text)
+                
+                # Validate critical fields
+                if metadata.get('title') and metadata.get('summary'):
+                    logger.info(f"Primary LLM ({self.provider}) extraction successful")
+                    return metadata
+                else:
+                    logger.warning(f"Primary LLM ({self.provider}) returned incomplete metadata")
+                    if not retry_with_fallback or not self.fallback_llm:
+                        return metadata
+                    
+            except Exception as e:
+                logger.error(f"Primary LLM ({self.provider}) extraction failed: {str(e)}")
+                if not retry_with_fallback or not self.fallback_llm:
+                    return {}
+        
+        # Try fallback LLM if available
+        if retry_with_fallback and self.fallback_llm:
+            try:
+                logger.info(f"Retrying with fallback LLM ({self.fallback_provider})...")
+                response = self.fallback_llm.invoke(prompt)
+                
+                import json
+                response_text = response.content.strip()
+                
+                # Clean up response
+                if response_text.startswith("```"):
+                    response_text = response_text.split("```")[1]
+                    if response_text.startswith("json"):
+                        response_text = response_text[4:]
+                
+                metadata = json.loads(response_text)
+                logger.info(f"Fallback LLM ({self.fallback_provider}) extraction successful")
+                return metadata
+                
+            except Exception as e:
+                logger.error(f"Fallback LLM ({self.fallback_provider}) extraction failed: {str(e)}")
+                return {}
+        
+        return {}
+
+    def validate_metadata_quality(self, metadata: Dict) -> tuple[bool, str]:
+        """
+        Validate if extracted metadata meets quality requirements
+        
+        Args:
+            metadata: Extracted metadata dictionary
+        
+        Returns:
+            Tuple of (is_valid, reason)
+        """
+        require_title = os.getenv("REQUIRE_TITLE", "true").lower() == "true"
+        require_summary = os.getenv("REQUIRE_SUMMARY", "true").lower() == "true"
+        
+        # Check title
+        if require_title:
+            title = metadata.get('title', '').strip()
+            if not title or len(title) < 5:
+                return False, "Missing or invalid title"
+        
+        # Check summary
+        if require_summary:
+            summary = metadata.get('summary', '').strip()
+            if not summary or len(summary) < 20:
+                return False, "Missing or invalid summary"
+        
+        # Check if we have at least some metadata
+        if not any([
+            metadata.get('title'),
+            metadata.get('department'),
+            metadata.get('document_type'),
+            metadata.get('summary')
+        ]):
+            return False, "No meaningful metadata extracted"
+        
+        return True, "Metadata quality acceptable"
