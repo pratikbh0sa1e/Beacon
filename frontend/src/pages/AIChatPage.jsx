@@ -204,7 +204,7 @@ const Message = ({ message, isUser, onCitationClick }) => {
               {/* Show visible citation pills */}
               {visibleCitations.map((citation, idx) => {
                 const statusInfo = getApprovalStatusIcon(
-                  citation.approval_status
+                  citation.approval_status,
                 );
                 const StatusIcon = statusInfo?.icon;
 
@@ -317,41 +317,41 @@ export const AIChatPage = () => {
       if (!currentSessionId && messages.length === 0) {
         clearCurrentSession();
       }
-      
+
       // Check if we have analysis result from web scraping
-      const analysisResultStr = sessionStorage.getItem('analysisResult');
-      
+      const analysisResultStr = sessionStorage.getItem("analysisResult");
+
       if (analysisResultStr) {
         // Clear from session storage
-        sessionStorage.removeItem('analysisResult');
-        
+        sessionStorage.removeItem("analysisResult");
+
         const analysisResult = JSON.parse(analysisResultStr);
-        
+
         // Show the analysis prominently
         setTimeout(async () => {
           try {
             // Create a new session with descriptive title
             const sessionTitle = `Analysis: ${analysisResult.documents[0].substring(0, 40)}...`;
             await createSession(sessionTitle);
-            
+
             // Send the analysis request message
-            const userMessage = `📄 Analyze these ${analysisResult.documents.length} documents:\n\n${analysisResult.documents.map((d, i) => `${i + 1}. ${d}`).join('\n')}`;
-            
+            const userMessage = `📄 Analyze these ${analysisResult.documents.length} documents:\n\n${analysisResult.documents.map((d, i) => `${i + 1}. ${d}`).join("\n")}`;
+
             // Send message which will trigger the chat store to add it
             // But we already have the analysis, so we'll display it directly
             await sendMessage(userMessage);
-            
+
             // Show prominent success notification
             toast.success(`✅ Document Analysis Complete!`, {
               description: `Processed ${analysisResult.documents_processed} documents with ${analysisResult.total_chunks} text chunks`,
-              duration: 5000
+              duration: 5000,
             });
           } catch (error) {
-            console.error('Error loading analysis:', error);
+            console.error("Error loading analysis:", error);
             // Fallback: just show the analysis in a toast
-            toast.info('Analysis Results Ready', {
-              description: 'Scroll down to see the complete analysis',
-              duration: 5000
+            toast.info("Analysis Results Ready", {
+              description: "Scroll down to see the complete analysis",
+              duration: 5000,
             });
           }
         }, 800);
@@ -480,7 +480,7 @@ export const AIChatPage = () => {
       setIsTranscribing(false);
       console.error("Voice query error:", error);
       toast.error(
-        error.response?.data?.detail || "Failed to process voice query"
+        error.response?.data?.detail || "Failed to process voice query",
       );
     }
   };
@@ -595,27 +595,51 @@ export const AIChatPage = () => {
         icon={Bot}
       />
 
-      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden">
-        {/* Sidebar - Collapsible */}
+      <div className="flex-1 flex gap-4 min-h-0 overflow-hidden relative">
+        {/* Mobile Sidebar Overlay */}
         <AnimatePresence>
           {isSidebarOpen && (
-            <motion.div
-              initial={{ width: 0, opacity: 0 }}
-              animate={{ width: 320, opacity: 1 }}
-              exit={{ width: 0, opacity: 0 }}
-              transition={{ duration: 0.3, ease: "easeInOut" }}
-              className="flex-shrink-0 overflow-hidden"
-            >
-              <Card className="glass-card border-border/50 h-full w-80">
-                <ChatSidebar />
-              </Card>
-            </motion.div>
+            <>
+              {/* Mobile backdrop - only show on small screens */}
+              <motion.div
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                exit={{ opacity: 0 }}
+                onClick={() => setIsSidebarOpen(false)}
+                className="fixed inset-0 bg-black/50 backdrop-blur-sm z-40 lg:hidden"
+              />
+
+              {/* Sidebar */}
+              <motion.div
+                initial={{
+                  width: 0,
+                  opacity: 0,
+                  x: window.innerWidth < 1024 ? -320 : 0, // Slide from left on mobile
+                }}
+                animate={{
+                  width: window.innerWidth < 1024 ? 320 : 320,
+                  opacity: 1,
+                  x: 0,
+                }}
+                exit={{
+                  width: 0,
+                  opacity: 0,
+                  x: window.innerWidth < 1024 ? -320 : 0,
+                }}
+                transition={{ duration: 0.3, ease: "easeInOut" }}
+                className="flex-shrink-0 overflow-hidden fixed lg:relative left-0 top-0 h-full lg:h-auto z-50 lg:z-auto"
+              >
+                <Card className="glass-card border-border/50 h-full w-80">
+                  <ChatSidebar />
+                </Card>
+              </motion.div>
+            </>
           )}
         </AnimatePresence>
 
         {/* Main Chat Area */}
         <Card className="glass-card border-border/50 flex-1 flex flex-col overflow-hidden">
-          <CardContent className="p-6 flex-1 flex flex-col min-h-0">
+          <CardContent className="p-3 sm:p-6 flex-1 flex flex-col min-h-0">
             {/* Toggle Button */}
             <div className="flex items-center gap-2 mb-4">
               <Button
@@ -628,12 +652,12 @@ export const AIChatPage = () => {
                 }
               >
                 <Menu className="h-4 w-4" />
-                <span className="text-xs">
+                <span className="text-xs hidden sm:inline">
                   {isSidebarOpen ? "Hide History" : "Show History"}
                 </span>
               </Button>
             </div>
-            <div className="flex-1 overflow-y-auto min-h-0 space-y-6 mb-4 scrollbar-hide">
+            <div className="flex-1 overflow-y-auto min-h-0 space-y-4 sm:space-y-6 mb-4 scrollbar-hide">
               <AnimatePresence>
                 {messages.map((message) => (
                   <Message
@@ -710,7 +734,7 @@ export const AIChatPage = () => {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyPress={handleKeyPress}
                   disabled={loading}
-                  className="flex-1"
+                  className="flex-1 text-sm sm:text-base"
                 />
                 <input
                   type="file"
@@ -723,7 +747,9 @@ export const AIChatPage = () => {
                   onClick={() => fileInputRef.current?.click()}
                   disabled={loading}
                   variant="outline"
+                  size="sm"
                   title="Upload audio file"
+                  className="hidden sm:flex"
                 >
                   <Upload className="h-4 w-4" />
                 </Button>
@@ -731,6 +757,7 @@ export const AIChatPage = () => {
                   onClick={toggleRecording}
                   disabled={loading}
                   variant={isRecording ? "destructive" : "outline"}
+                  size="sm"
                   title={isRecording ? "Stop recording" : "Start recording"}
                 >
                   {isRecording ? (
@@ -743,14 +770,20 @@ export const AIChatPage = () => {
                   onClick={handleSend}
                   disabled={!input.trim() || loading}
                   className="neon-glow"
+                  size="sm"
                 >
                   <Send className="h-4 w-4" />
                 </Button>
               </div>
               <p className="text-xs text-muted-foreground mt-2 flex items-center gap-1">
-                <AlertCircle className="h-3 w-3" />
-                AI responses may not always be accurate. Verify important
-                information. Use 🎤 for voice queries.
+                <AlertCircle className="h-3 w-3 flex-shrink-0" />
+                <span className="hidden sm:inline">
+                  AI responses may not always be accurate. Verify important
+                  information. Use 🎤 for voice queries.
+                </span>
+                <span className="sm:hidden">
+                  AI responses may not be accurate. Use 🎤 for voice.
+                </span>
               </p>
             </div>
           </CardContent>

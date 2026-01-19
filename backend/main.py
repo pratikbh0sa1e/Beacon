@@ -92,8 +92,8 @@ app.add_middleware(
         "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
-        "https://*.vercel.app",  # Allow Vercel deployments
-        "https://your-frontend-domain.vercel.app",  # Replace with actual domain
+        "https://beacon-67.vercel.app",  # Production Vercel deployment
+        "https://*.vercel.app",  # Allow other Vercel deployments
     ],
     allow_credentials=True,
     allow_methods=["*"],
@@ -148,6 +148,7 @@ async def root():
     }
 
 @app.get("/health")
+@app.head("/health")
 async def health_check():
     return {
         "status": "healthy",
