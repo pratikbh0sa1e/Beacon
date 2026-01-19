@@ -88,9 +88,11 @@ app.add_middleware(
     allow_origins=[
         "http://localhost:5173",
         "http://localhost:3000",
-        "http://localhost:3001",  # Added for frontend running on port 3001
+        "http://localhost:3001",
         "http://127.0.0.1:3000",
         "http://127.0.0.1:3001",
+        "https://*.vercel.app",  # Allow Vercel deployments
+        "https://your-frontend-domain.vercel.app",  # Replace with actual domain
     ],
     allow_credentials=True,
     allow_methods=["*"],

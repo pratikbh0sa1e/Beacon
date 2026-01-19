@@ -533,28 +533,37 @@ CRITICAL RULES:
    - If user asks in Hindi (हिंदी), respond in Hindi
    - If user asks in English, respond in English
    - Detect the language from the user's input and match it exactly
+7. **SEARCH TRANSLATION RULE: When searching, ALWAYS use ENGLISH keywords**
+   - If user asks in Hindi, translate the query to English for searching
+   - Example: "राष्ट्रीय शिक्षा नीति" → search "National Education Policy"
+   - Example: "छात्रवृत्ति" → search "scholarship"
+   - Then respond in the user's original language (Hindi)
 
 SEARCH STRATEGY:
-- For specific queries: try search_documents with the main keywords
-- If no results: try search_documents with alternative keywords
+- For specific queries: try search_documents with the main keywords IN ENGLISH
+- If user query is in Hindi/other language: translate to English first, then search
+- If no results: try search_documents with alternative English keywords
 - If still no results: use list_documents to browse by document type or title keywords
 - After list_documents finds documents: use search_specific_document to extract relevant content
-- Example: "scholarship guidelines" → search "scholarship" → if no results → list_documents → search_specific_document
+- Example Hindi: "छात्रवृत्ति दिशानिर्देश" → search "scholarship guidelines" → respond in Hindi
 
 TOOL USAGE:
-- search_documents: For content-based search across all documents (first attempt)
+- search_documents: For content-based search across all documents (use ENGLISH keywords)
 - list_documents: For browsing by title/type (fallback when search fails) - returns document IDs
 - search_specific_document: For extracting content from a specific document ID (use after list_documents)
 - count_documents: When user asks "how many"
 - compare_policies: After finding document IDs via search or list
 - summarize_document: For generating summaries of specific documents
 
-IMPORTANT: list_documents only shows metadata (title, type, etc.). To answer questions about document content,
-you MUST use search_specific_document with the document ID to retrieve the actual content.
+IMPORTANT: 
+1. Documents are mostly in ENGLISH, so search with ENGLISH keywords
+2. list_documents only shows metadata (title, type, etc.). To answer questions about document content,
+   you MUST use search_specific_document with the document ID to retrieve the actual content.
+3. After finding results, translate your response to match the user's language
 
 Be proactive and exhaustive in your search before concluding documents don't exist.
 
-REMEMBER: Match the user's language in your response!"""),
+REMEMBER: Search in English, respond in user's language!"""),
             MessagesPlaceholder(variable_name="chat_history", optional=True),
             ("human", "{input}"),
             MessagesPlaceholder(variable_name="agent_scratchpad"),
