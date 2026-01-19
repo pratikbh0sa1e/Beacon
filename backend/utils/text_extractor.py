@@ -163,13 +163,13 @@ def extract_text_enhanced(file_path: str, file_type: str, use_ocr=True):
             'ocr_metadata': None
         }
     
-    # For PDF and images, use OCR Manager if enabled
+    # For PDF and images, use Cloud OCR Service if enabled
     if use_ocr and file_type in ["pdf", "jpg", "jpeg", "png", "tiff", "bmp"]:
         try:
-            from backend.utils.ocr import OCRManager
+            from backend.utils.cloud_ocr_service import get_ocr_service
             
-            ocr_manager = OCRManager(languages=['en', 'hi'])
-            result = ocr_manager.extract_text(file_path, file_type, preprocessing_level='medium')
+            ocr_service = get_ocr_service()
+            result = ocr_service.extract_text_from_image(file_path, language="en")
             
             return {
                 'text': result['text'],
@@ -177,7 +177,7 @@ def extract_text_enhanced(file_path: str, file_type: str, use_ocr=True):
                 'ocr_metadata': result
             }
         except Exception as e:
-            print(f"OCR extraction failed, falling back to legacy: {str(e)}")
+            print(f"Cloud OCR extraction failed, falling back to legacy: {str(e)}")
             # Fallback to legacy extraction
             if file_type == "pdf":
                 text = extract_text_from_pdf(file_path)

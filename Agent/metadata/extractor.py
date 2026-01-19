@@ -4,7 +4,16 @@ import re
 from typing import Dict, List, Optional
 from pathlib import Path
 from datetime import datetime
-from sklearn.feature_extraction.text import TfidfVectorizer
+
+# Try to import sklearn, with fallback for deployment issues
+try:
+    from sklearn.feature_extraction.text import TfidfVectorizer
+    SKLEARN_AVAILABLE = True
+except ImportError:
+    SKLEARN_AVAILABLE = False
+    logger = logging.getLogger(__name__)
+    logger.warning("scikit-learn not available - using simple keyword extraction fallback")
+
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 import os
@@ -288,7 +297,12 @@ class MetadataExtractor:
         return metadata
     
     def _extract_tfidf_keywords(self, text: str, top_n: int = 20) -> List[str]:
-        """Extract top keywords using TF-IDF"""
+        """Extract top keywords using TF-IDF with fallback"""
+        if not SKLEARN_AVAILABLE:
+            # Fallback to simple keyword extraction
+            logger.info("Using simple keyword extraction fallback (sklearn not available)")
+            return self._simple_keyword_extraction(text, top_n)
+        
         try:
             vectorizer = TfidfVectorizer(
                 max_features=top_n,
@@ -309,7 +323,36 @@ class MetadataExtractor:
             
         except Exception as e:
             logger.error(f"Error extracting TF-IDF keywords: {str(e)}")
-            return []
+            logger.info("Falling back to simple keyword extraction")
+            return self._simple_keyword_extraction(text, top_n)
+    
+    def _simple_keyword_extraction(self, text: str, top_n: int = 20) -> List[str]:
+        """Simple keyword extraction fallback when sklearn is not available"""
+        import re
+        from collections import Counter
+        
+        # Simple stopwords list
+        stopwords = {
+            'the', 'a', 'an', 'and', 'or', 'but', 'in', 'on', 'at', 'to', 'for', 'of', 'with', 'by',
+            'is', 'are', 'was', 'were', 'be', 'been', 'being', 'have', 'has', 'had', 'do', 'does', 'did',
+            'will', 'would', 'could', 'should', 'may', 'might', 'must', 'can', 'this', 'that', 'these', 'those',
+            'i', 'you', 'he', 'she', 'it', 'we', 'they', 'me', 'him', 'her', 'us', 'them', 'my', 'your', 'his',
+            'her', 'its', 'our', 'their', 'mine', 'yours', 'hers', 'ours', 'theirs', 'from', 'up', 'about', 'into',
+            'through', 'during', 'before', 'after', 'above', 'below', 'between', 'among', 'under', 'over'
+        }
+        
+        # Extract words (2+ characters, alphanumeric)
+        words = re.findall(r'\b[a-zA-Z]{2,}\b', text.lower())
+        
+        # Filter out stopwords and get word counts
+        filtered_words = [word for word in words if word not in stopwords and len(word) > 2]
+        word_counts = Counter(filtered_words)
+        
+        # Get top keywords
+        keywords = [word for word, count in word_counts.most_common(top_n)]
+        
+        logger.info(f"Extracted {len(keywords)} simple keywords")
+        return keywords
     
     def _llm_extract_metadata(self, text: str, filename: str, retry_with_fallback: bool = True) -> Dict:
         """

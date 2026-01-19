@@ -19,7 +19,7 @@ from backend.routers import (
     insights_router,
     document_chat_router,
     notes_router,
-    ocr_router
+    # ocr_router  # Temporarily disabled - uses EasyOCR dependencies
 )
 # Temporary: Use no-DB version until migration is complete
 from backend.routers import web_scraping_router_temp as web_scraping_router
@@ -124,7 +124,7 @@ app.include_router(web_scraping_router.router, tags=["web-scraping"])  # Web scr
 app.include_router(enhanced_scraping_router, tags=["enhanced-web-scraping"])  # Enhanced web scraping with families
 app.include_router(document_analysis_router.router, tags=["document-analysis"])  # Document analysis with AI
 app.include_router(scraping_logs.router, tags=["scraping-logs"])  # Scraping logs
-app.include_router(ocr_router.router, prefix="/ocr", tags=["ocr"])
+# app.include_router(ocr_router.router, prefix="/ocr", tags=["ocr"])  # Temporarily disabled - uses EasyOCR
 
 @app.get("/")
 async def root():
