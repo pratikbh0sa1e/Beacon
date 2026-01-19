@@ -28,6 +28,7 @@ from backend.routers import scraping_logs
 from backend.routers.enhanced_web_scraping_router import router as enhanced_scraping_router
 from backend.init_developer import initialize_developer_account
 from Agent.data_ingestion.scheduler import start_scheduler
+from backend.utils.quota_manager import get_quota_manager
 from dotenv import load_dotenv
 import logging
 import time
@@ -153,6 +154,55 @@ async def health_check():
         "database": "connected",
         "services": ["auth", "documents", "chat", "approvals", "data-sources", "insights"]
     }
+
+@app.get("/quota/status")
+async def get_quota_status():
+    """Get current quota status for all cloud services"""
+    try:
+        quota_manager = get_quota_manager()
+        status = quota_manager.get_quota_status()
+        
+        return {
+            "status": "success",
+            "quota_status": status,
+            "cloud_only_mode": True,  # Always true for deployment
+            "message": "Quota status retrieved successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error getting quota status: {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to get quota status: {str(e)}"
+        }
+
+@app.get("/quota/status/{service}")
+async def get_service_quota_status(service: str):
+    """Get quota status for a specific service"""
+    try:
+        quota_manager = get_quota_manager()
+        
+        # Validate service name
+        valid_services = ["gemini_embeddings", "gemini_chat", "speech_to_text", "vision_ocr"]
+        if service not in valid_services:
+            return {
+                "status": "error",
+                "message": f"Invalid service. Valid services: {', '.join(valid_services)}"
+            }
+        
+        status = quota_manager.get_quota_status(service)
+        
+        return {
+            "status": "success",
+            "service": service,
+            "quota_status": status,
+            "message": f"Quota status for {service} retrieved successfully"
+        }
+    except Exception as e:
+        logger.error(f"Error getting quota status for {service}: {e}")
+        return {
+            "status": "error",
+            "message": f"Failed to get quota status for {service}: {str(e)}"
+        }
 
 @app.on_event("startup")
 async def startup_event():

@@ -1,4 +1,4 @@
-"""ReAct agent with LangGraph for policy Q&A"""
+"""ReAct agent with LangGraph for policy Q&A with quota management"""
 import logging
 import os
 from typing import TypedDict, Annotated, Sequence, AsyncGenerator, List
@@ -23,6 +23,7 @@ from Agent.tools.lazy_search_tools import (
     search_specific_document_lazy
 )
 from Agent.rag_enhanced.family_aware_retriever import enhanced_search_documents
+from backend.utils.quota_manager import get_quota_manager, QuotaExceededException
 
 def search_documents_with_metadata_fallback(query: str, top_k: int = 5, user_role: Optional[str] = None, user_institution_id: Optional[int] = None) -> str:
     """Enhanced search with intelligent metadata fallback"""
@@ -286,28 +287,40 @@ class AgentState(TypedDict):
 
 
 class PolicyRAGAgent:
-    """ReAct agent for policy document Q&A"""
+    """ReAct agent for policy document Q&A with quota management"""
     
     def __init__(self, google_api_key: str, temperature: float = 0.1):
         """
-        Initialize the RAG agent with multi-provider support
+        Initialize the RAG agent with multi-provider support and quota management
         
         Args:
             google_api_key: Google API key for Gemini
             temperature: LLM temperature (0.1 for precise answers)
         """
-        logger.info("Initializing PolicyRAGAgent")
+        logger.info("Initializing PolicyRAGAgent with quota management")
+        
+        # Initialize quota manager
+        self.quota_manager = get_quota_manager()
+        
+        # Check if cloud-only mode is enabled (default for deployment)
+        self.cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
         
         # Get provider from environment
         provider = os.getenv("RAG_LLM_PROVIDER", "gemini")
         fallback_provider = os.getenv("RAG_FALLBACK_PROVIDER", "gemini")
+        
+        # Force Gemini in cloud-only mode
+        if self.cloud_only:
+            provider = "gemini"
+            fallback_provider = "gemini"
+            logger.info("Cloud-only mode enabled - using Gemini for RAG")
         
         # Initialize primary LLM
         self.llm = self._initialize_llm(provider, google_api_key, temperature)
         
         # Initialize fallback LLM if different from primary
         self.fallback_llm = None
-        if fallback_provider != provider:
+        if fallback_provider != provider and not self.cloud_only:
             self.fallback_llm = self._initialize_llm(fallback_provider, google_api_key, temperature)
         
         if self.llm:
@@ -329,14 +342,14 @@ class PolicyRAGAgent:
         self.memory = MemorySaver()
         self.graph = self._create_graph()
         
-        logger.info("PolicyRAGAgent initialized successfully")
+        logger.info("PolicyRAGAgent initialized successfully with quota management")
     
     def _initialize_llm(self, provider: str, google_api_key: str, temperature: float):
         """
-        Initialize LLM based on provider
+        Initialize LLM based on provider with quota management
         
         Args:
-            provider: LLM provider ("openrouter", "gemini", "openai")
+            provider: LLM provider ("openrouter", "gemini", "openai", "ollama")
             google_api_key: Google API key for Gemini
             temperature: LLM temperature
         
@@ -344,7 +357,66 @@ class PolicyRAGAgent:
             Initialized LLM instance
         """
         try:
-            if provider == "openrouter":
+            if provider == "gemini":
+                if not google_api_key:
+                    logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
+                    return None
+                
+                logger.info("Initializing Gemini (gemini-2.5-flash) for RAG agent with quota management")
+                
+                # Create the base Gemini model
+                base_model = ChatGoogleGenerativeAI(
+                    model="gemini-2.5-flash",
+                    google_api_key=google_api_key,
+                    temperature=temperature,
+                    streaming=False,
+                    convert_system_message_to_human=True  # Important for Gemini
+                )
+                
+                # Create a wrapper class using composition instead of inheritance
+                class QuotaManagedGeminiWrapper:
+                    def __init__(self, base_llm, quota_manager_instance):
+                        self._base_llm = base_llm
+                        self._quota_manager = quota_manager_instance
+                        # Copy important attributes from base model
+                        self.model_name = base_llm.model_name if hasattr(base_llm, 'model_name') else "gemini-2.5-flash"
+                        self.temperature = base_llm.temperature if hasattr(base_llm, 'temperature') else temperature
+                    
+                    def invoke(self, messages, **kwargs):
+                        """Main method used by LangChain agents"""
+                        return self._generate_with_quota(messages, **kwargs)
+                    
+                    def _generate_with_quota(self, messages, **kwargs):
+                        """Generate response with quota management"""
+                        try:
+                            # Check quota before making API call
+                            allowed, error_msg, quota_info = self._quota_manager.check_quota("gemini_chat", 1)
+                            if not allowed:
+                                # Return quota exceeded message
+                                from langchain_core.messages import AIMessage
+                                return AIMessage(content=f"Daily chat quota exceeded. Please try again tomorrow. {error_msg}")
+                            
+                            # Make the API call using the base model
+                            result = self._base_llm.invoke(messages, **kwargs)
+                            
+                            # Consume quota after successful API call
+                            self._quota_manager.consume_quota("gemini_chat", 1)
+                            
+                            return result
+                            
+                        except Exception as e:
+                            logger.error(f"Gemini chat failed: {e}")
+                            # Return error message
+                            from langchain_core.messages import AIMessage
+                            return AIMessage(content=f"Chat service temporarily unavailable: {str(e)}")
+                    
+                    def __getattr__(self, name):
+                        """Delegate other method calls to the base model"""
+                        return getattr(self._base_llm, name)
+                
+                return QuotaManagedGeminiWrapper(base_model, self.quota_manager)
+            
+            elif provider == "openrouter" and not self.cloud_only:
                 openrouter_api_key = os.getenv("OPENROUTER_API_KEY")
                 if not openrouter_api_key:
                     logger.warning("OPENROUTER_API_KEY not found - OpenRouter unavailable")
@@ -366,21 +438,7 @@ class PolicyRAGAgent:
                     }
                 )
             
-            elif provider == "gemini":
-                if not google_api_key:
-                    logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
-                    return None
-                
-                logger.info("Initializing Gemini (gemini-2.5-flash) for RAG agent")
-                return ChatGoogleGenerativeAI(
-                    model="gemini-2.5-flash",
-                    google_api_key=google_api_key,
-                    temperature=temperature,
-                    streaming=False,
-                    convert_system_message_to_human=True  # Important for Gemini
-                )
-            
-            elif provider == "openai":
+            elif provider == "openai" and not self.cloud_only:
                 openai_api_key = os.getenv("OPENAI_API_KEY")
                 if not openai_api_key:
                     logger.warning("OPENAI_API_KEY not found - OpenAI unavailable")
@@ -394,7 +452,7 @@ class PolicyRAGAgent:
                     streaming=False
                 )
             
-            elif provider == "ollama":
+            elif provider == "ollama" and not self.cloud_only:
                 ollama_base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
                 ollama_model = os.getenv("OLLAMA_MODEL", "llama3.2")
                 
@@ -406,6 +464,10 @@ class PolicyRAGAgent:
                     temperature=temperature,
                     streaming=False
                 )
+            
+            elif self.cloud_only and provider != "gemini":
+                logger.warning(f"Provider {provider} not available in cloud-only mode, falling back to Gemini")
+                return self._initialize_llm("gemini", google_api_key, temperature)
             
             else:
                 logger.error(f"Unknown provider: {provider}")
@@ -1009,3 +1071,7 @@ REMEMBER: Search in English, respond in user's language!"""),
                 "recoverable": False,
                 "timestamp": time.time()
             }
+    
+    def get_quota_status(self) -> dict:
+        """Get current quota status for all services"""
+        return self.quota_manager.get_quota_status()

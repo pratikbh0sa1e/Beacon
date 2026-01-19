@@ -1,24 +1,17 @@
-# Government Policy Intelligence Platform - Requirements
+# Government Policy Intelligence Platform - Cloud Deployment Requirements
 # Python 3.11+ recommended
+# OPTIMIZED FOR FREE CLOUD DEPLOYMENT
 
 # ============================================
-# LangChain & LLM Integrations
+# LangChain & LLM Integrations (Cloud APIs)
 # ============================================
 langchain==0.3.18
 langchain-core==0.3.39
 langgraph==0.2.66
-langchain-anthropic==0.3.8
 langchain-google-genai==2.0.8
 google-generativeai==0.8.3
-langchain-huggingface==0.1.2
-transformers==4.57.3
-huggingface-hub==0.36.0
-langchainhub==0.1.21
-langchain-text-splitters==0.3.6
-langchain-community==0.3.17
 langsmith
-openai>=1.0.0  # For Grok API (xAI) - uses OpenAI-compatible interface
-langchain-openai==0.2.14  # LangChain OpenAI integration
+langchain-openai==0.2.14  # For OpenRouter and OpenAI APIs
 
 # ============================================
 # Web Framework & API
@@ -53,29 +46,24 @@ storage3==0.11.3
 supafunc==0.9.4
 
 # ============================================
-# Document Processing & OCR
+# Document Processing (Lightweight)
 # ============================================
 PyMuPDF==1.25.2
 python-docx==1.1.2
 python-pptx==1.0.2
 Pillow==11.1.0
-easyocr==1.7.2
-opencv-python-headless==4.10.0.84
-scikit-image==0.25.2
 python-bidi==0.6.7
 lxml==6.0.2
 
 # ============================================
-# Voice/Audio Processing
+# Cloud APIs (Google Cloud Services)
 # ============================================
-openai-whisper==20231117
-ffmpeg-python==0.2.0
 google-cloud-speech==2.26.0
+google-cloud-vision==3.4.4
 
 # ============================================
-# Vector Embeddings & Search
+# Vector Database (pgvector)
 # ============================================
-sentence-transformers==3.3.1
 pgvector==0.3.6
 
 # ============================================
@@ -103,8 +91,6 @@ ujson==5.10.0
 python-dotenv==1.1.0
 numpy>=1.26.4,<2.0.0
 pandas==2.3.3
-scikit-learn==1.7.2
-scipy==1.16.3
 PyYAML==6.0.2
 click==8.1.8
 colorama==0.4.6
@@ -129,9 +115,6 @@ sniffio==1.3.1
 websockets==12.0
 markdown-it-py==3.0.0
 Pygments==2.19.1
-Shapely==2.1.2
-pyclipper==1.3.0.post6
-ninja==1.13.0
 
 # ============================================
 # Development & Testing
@@ -143,7 +126,6 @@ pytest-mock==3.15.1
 # RAG & Search Dependencies
 # ============================================
 rank-bm25==0.2.2
-duckduckgo-search==7.5.5
 
 # ============================================
 # Performance & Caching
@@ -156,4 +138,47 @@ redis==5.0.1
 # ============================================
 beautifulsoup4==4.12.3
 requests==2.32.3
-lxml==5.3.0  # Already included above but ensuring version
+
+# ============================================
+# OPTIONAL DEPENDENCIES FOR LOCAL DEVELOPMENT
+# ============================================
+# Uncomment these for local development (set CLOUD_ONLY_MODE=false)
+# Heavy dependencies removed for cloud deployment
+
+# Local AI Models (DEVELOPMENT ONLY - Requires 4-8GB RAM)
+# sentence-transformers==3.3.1  # BGE-M3 embeddings (2-4GB)
+# torch>=2.0.0  # PyTorch for local models
+# transformers==4.57.3  # Hugging Face models
+
+# Local OCR (DEVELOPMENT ONLY)
+# easyocr==1.7.2  # EasyOCR models (100-500MB)
+# opencv-python-headless==4.10.0.84
+# scikit-image==0.25.2
+# pytesseract  # Tesseract OCR fallback
+
+# Local Speech-to-Text (DEVELOPMENT ONLY)
+# openai-whisper==20231117  # Whisper models (244MB-3GB)
+# ffmpeg-python==0.2.0
+
+# Additional ML Dependencies (DEVELOPMENT ONLY)
+# scikit-learn==1.7.2
+# scipy==1.16.3
+# huggingface-hub==0.36.0
+# langchain-huggingface==0.1.2
+
+# ============================================
+# DEPLOYMENT NOTES
+# ============================================
+# This requirements.txt is optimized for cloud deployment with:
+# - Google Gemini Embeddings API (1,500 requests/day)
+# - Google Gemini Chat API (1,500 requests/day, 15/minute)
+# - Google Cloud Speech-to-Text API (60 minutes/month)
+# - Google Cloud Vision OCR API (1,000 requests/month)
+#
+# Memory usage: ~512MB (fits Render free tier)
+# vs Local models: 4-8GB RAM required
+#
+# For local development:
+# 1. Set CLOUD_ONLY_MODE=false in .env
+# 2. Uncomment optional dependencies above
+# 3. Install with: pip install -r requirements.txt

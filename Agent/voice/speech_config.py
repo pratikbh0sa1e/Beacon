@@ -1,5 +1,5 @@
 """
-Centralized speech-to-text configuration
+Centralized speech-to-text configuration with cloud-only mode support
 Change ACTIVE_ENGINE to switch between transcription engines
 """
 from typing import Dict, Any
@@ -29,9 +29,9 @@ SPEECH_ENGINES = {
         "languages": ["125+ languages"],
         "description": "Google Cloud Speech-to-Text API",
         "use_case": "Cloud-based, high accuracy, pay per use",
-        "cost": "$0.006 per 15 seconds",
+        "cost": "$0.006 per 15 seconds (60 min/month free)",
         "requires_api_key": True,
-        "api_key_env": "GOOGLE_CLOUD_API_KEY"
+        "api_key_env": "GOOGLE_API_KEY"
     },
     
     # Whisper via OpenAI API (cloud)
@@ -50,11 +50,21 @@ SPEECH_ENGINES = {
 # ============================================
 # ACTIVE ENGINE CONFIGURATION
 # ============================================
-# Change this to switch speech-to-text engines
-# Options: "whisper-local", "google-cloud", "whisper-api"
+# Automatically use Google Cloud Speech in cloud-only mode, otherwise use local Whisper
 
-ACTIVE_ENGINE = "whisper-local"  # 🎤 Local Whisper (recommended)
-# ACTIVE_ENGINE = "google-cloud"  # ☁️ Google Cloud Speech-to-Text
+def get_active_engine_key() -> str:
+    """Get the active engine key based on cloud-only mode"""
+    cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
+    
+    if cloud_only:
+        # Force Google Cloud Speech in cloud-only mode
+        return "google-cloud"
+    else:
+        # Use local Whisper in development mode
+        return "whisper-local"
+
+# Get the active engine dynamically
+ACTIVE_ENGINE = get_active_engine_key()
 
 # ============================================
 # Whisper Model Configuration
@@ -91,10 +101,12 @@ DEFAULT_LANGUAGE = None  # Auto-detect
 
 def get_active_engine_config() -> Dict[str, Any]:
     """Get configuration for the currently active engine"""
-    if ACTIVE_ENGINE not in SPEECH_ENGINES:
-        raise ValueError(f"Invalid ACTIVE_ENGINE: {ACTIVE_ENGINE}. Choose from {list(SPEECH_ENGINES.keys())}")
+    active_engine = get_active_engine_key()  # Always get fresh value
     
-    return SPEECH_ENGINES[ACTIVE_ENGINE]
+    if active_engine not in SPEECH_ENGINES:
+        raise ValueError(f"Invalid ACTIVE_ENGINE: {active_engine}. Choose from {list(SPEECH_ENGINES.keys())}")
+    
+    return SPEECH_ENGINES[active_engine]
 
 
 def get_engine_type() -> str:
@@ -131,10 +143,13 @@ def validate_api_key() -> bool:
 
 def get_engine_info() -> str:
     """Get human-readable info about the active engine"""
+    active_engine = get_active_engine_key()
     config = get_active_engine_config()
+    cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
     
     info = f"""
-Active Speech-to-Text Engine: {ACTIVE_ENGINE}
+Active Speech-to-Text Engine: {active_engine}
+Cloud-Only Mode: {cloud_only}
 Engine Type: {config['engine_type']}
 Languages: {', '.join(config['languages'])}
 Description: {config['description']}
@@ -143,7 +158,7 @@ Cost: {config['cost']}
 Requires API Key: {config.get('requires_api_key', False)}
 """
     
-    if ACTIVE_ENGINE == "whisper-local":
+    if active_engine == "whisper-local":
         info += f"Whisper Model Size: {WHISPER_MODEL_SIZE}\n"
     
     return info
@@ -151,13 +166,18 @@ Requires API Key: {config.get('requires_api_key', False)}
 
 def list_available_engines() -> None:
     """Print all available speech-to-text engines"""
+    active_engine = get_active_engine_key()
+    cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
+    
     print("\n" + "="*60)
     print("Available Speech-to-Text Engines")
+    print(f"Cloud-Only Mode: {cloud_only}")
     print("="*60)
     
     for key, config in SPEECH_ENGINES.items():
-        active_marker = "✅ ACTIVE" if key == ACTIVE_ENGINE else ""
-        print(f"\n{key} {active_marker}")
+        active_marker = "✅ ACTIVE" if key == active_engine else ""
+        cloud_marker = "☁️ CLOUD" if config.get('requires_api_key') else "💻 LOCAL"
+        print(f"\n{key} {active_marker} {cloud_marker}")
         print(f"  Type: {config['engine_type']}")
         print(f"  Languages: {', '.join(config['languages'])}")
         print(f"  Cost: {config['cost']}")
@@ -166,7 +186,7 @@ def list_available_engines() -> None:
             print(f"  API Key: {config['api_key_env']}")
     
     print("\n" + "="*60)
-    print(f"To switch engines, edit ACTIVE_ENGINE in speech_config.py")
+    print(f"Active Engine: {active_engine} (auto-selected based on CLOUD_ONLY_MODE)")
     print("="*60 + "\n")
 
 

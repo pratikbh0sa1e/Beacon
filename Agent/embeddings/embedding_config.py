@@ -1,8 +1,9 @@
 """
-Centralized embedding model configuration
+Centralized embedding model configuration with cloud-only mode support
 Change ACTIVE_MODEL to switch between embedding models
 """
 from typing import Dict, Any
+import os
 
 # ============================================
 # Available Embedding Models
@@ -65,12 +66,22 @@ EMBEDDING_MODELS = {
 # ============================================
 # ACTIVE MODEL CONFIGURATION
 # ============================================
-# Change this to switch embedding models
-# Options: "bge-large-en", "bge-m3", "multilingual-e5-large", "labse", "gemini-embedding"
+# Automatically use Gemini in cloud-only mode, otherwise use local models
 
-# ACTIVE_MODEL = "gemini-embedding"  # 🌐 Google Gemini (cloud-based, multilingual) - QUOTA EXCEEDED
-ACTIVE_MODEL = "bge-m3"  # 🌍 Multilingual model (local)
-# ACTIVE_MODEL = "bge-large-en"  # 🇬🇧 English-only (local)
+def get_active_model_key() -> str:
+    """Get the active model key based on cloud-only mode"""
+    cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
+    
+    if cloud_only:
+        # Force Gemini embeddings in cloud-only mode
+        return "gemini-embedding"
+    else:
+        # Use local models in development mode
+        # You can change this for local development
+        return "bge-m3"  # Default local model
+
+# Get the active model dynamically
+ACTIVE_MODEL = get_active_model_key()
 
 # ============================================
 # Helper Functions
@@ -78,10 +89,12 @@ ACTIVE_MODEL = "bge-m3"  # 🌍 Multilingual model (local)
 
 def get_active_model_config() -> Dict[str, Any]:
     """Get configuration for the currently active model"""
-    if ACTIVE_MODEL not in EMBEDDING_MODELS:
-        raise ValueError(f"Invalid ACTIVE_MODEL: {ACTIVE_MODEL}. Choose from {list(EMBEDDING_MODELS.keys())}")
+    active_model = get_active_model_key()  # Always get fresh value
     
-    return EMBEDDING_MODELS[ACTIVE_MODEL]
+    if active_model not in EMBEDDING_MODELS:
+        raise ValueError(f"Invalid ACTIVE_MODEL: {active_model}. Choose from {list(EMBEDDING_MODELS.keys())}")
+    
+    return EMBEDDING_MODELS[active_model]
 
 
 def get_model_name() -> str:
@@ -101,10 +114,13 @@ def get_active_engine_config() -> Dict[str, Any]:
 
 def get_model_info() -> str:
     """Get human-readable info about the active model"""
+    active_model = get_active_model_key()
     config = get_active_model_config()
+    cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
     
     info = f"""
-Active Embedding Model: {ACTIVE_MODEL}
+Active Embedding Model: {active_model}
+Cloud-Only Mode: {cloud_only}
 Model Name: {config['model_name']}
 Dimension: {config['dimension']}
 Languages: {', '.join(config['languages'])}
@@ -121,20 +137,25 @@ Engine: {config.get('engine', 'sentence-transformers')}
 
 def list_available_models() -> None:
     """Print all available embedding models"""
+    active_model = get_active_model_key()
+    cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
+    
     print("\n" + "="*60)
     print("Available Embedding Models")
+    print(f"Cloud-Only Mode: {cloud_only}")
     print("="*60)
     
     for key, config in EMBEDDING_MODELS.items():
-        active_marker = "✅ ACTIVE" if key == ACTIVE_MODEL else ""
-        print(f"\n{key} {active_marker}")
+        active_marker = "✅ ACTIVE" if key == active_model else ""
+        cloud_marker = "☁️ CLOUD" if config.get('engine') == 'gemini' else "💻 LOCAL"
+        print(f"\n{key} {active_marker} {cloud_marker}")
         print(f"  Model: {config['model_name']}")
         print(f"  Dimension: {config['dimension']}")
         print(f"  Languages: {', '.join(config['languages'])}")
         print(f"  Use Case: {config['use_case']}")
     
     print("\n" + "="*60)
-    print(f"To switch models, edit ACTIVE_MODEL in embedding_config.py")
+    print(f"Active Model: {active_model} (auto-selected based on CLOUD_ONLY_MODE)")
     print("="*60 + "\n")
 
 
