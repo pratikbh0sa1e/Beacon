@@ -21,7 +21,7 @@ class ComplianceChecker:
         """
         genai.configure(api_key=google_api_key)
         self.model = genai.GenerativeModel('gemini-2.5-flash')
-        logger.info("ComplianceChecker initialized with Gemini 2.0 Flash")
+        logger.info("ComplianceChecker initialized with Gemini 2.5 Flash")
     
     def check_compliance(
         self,

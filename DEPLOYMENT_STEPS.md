@@ -152,7 +152,7 @@ scripts/create_demo_account.bat
 ### OpenRouter (Free Models)
 
 - **Llama 3.3 70B**: 200 requests/day
-- **Gemini 2.0 Flash**: 200 requests/day
+- **Gemini 2.5 Flash**: 200 requests/day
 
 ### Infrastructure
 

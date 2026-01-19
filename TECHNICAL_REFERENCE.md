@@ -50,7 +50,7 @@
 
 ### AI/ML
 
-- **LLM**: Google Gemini 2.0 Flash
+- **LLM**: Google Gemini 2.5 Flash
 - **Embeddings**: BGE-M3 (1024-dim, multilingual)
 - **Vector Store**: pgvector (PostgreSQL extension)
 - **Voice**: OpenAI Whisper (local) / Google Cloud Speech

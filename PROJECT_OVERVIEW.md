@@ -48,7 +48,7 @@ BEACON is an AI-powered document management and policy intelligence platform des
 
 **AI/ML Components**:
 
-- Google Gemini 2.0 Flash (LLM)
+- Google Gemini 2.5 Flash (LLM)
 - BGE-M3 embeddings (multilingual, 1024-dim)
 - OpenAI Whisper (voice transcription)
 - EasyOCR (image text extraction)

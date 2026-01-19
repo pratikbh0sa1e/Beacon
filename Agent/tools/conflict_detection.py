@@ -31,7 +31,7 @@ class ConflictDetector:
         self.lazy_embedder = LazyEmbedder()
         self.pgvector_store = PGVectorStore()
         self.embedder = BGEEmbedder()
-        logger.info("ConflictDetector initialized with Gemini 2.0 Flash")
+        logger.info("ConflictDetector initialized with Gemini 2.5 Flash")
     
     def detect_conflicts(
         self,

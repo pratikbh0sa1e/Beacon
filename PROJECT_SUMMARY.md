@@ -15,7 +15,7 @@
 **Frontend**: React 18 + Vite + TailwindCSS + shadcn/ui + Zustand  
 **Backend**: FastAPI + Python 3.11+ + SQLAlchemy + Alembic  
 **Database**: PostgreSQL 15+ with pgvector extension  
-**AI/ML**: Google Gemini 2.0 Flash, BGE-M3 embeddings, OpenAI Whisper  
+**AI/ML**: Google Gemini 2.5 Flash, BGE-M3 embeddings, OpenAI Whisper  
 **Storage**: Supabase S3 + CDN  
 **Authentication**: JWT + bcrypt + Email verification
 
@@ -111,7 +111,7 @@ Public Viewer (Limited) - Public documents only
 
 ### Language Models
 
-- **Google Gemini 2.0 Flash** - Primary LLM (1,500 requests/day)
+- **Google Gemini 2.5 Flash** - Primary LLM (1,500 requests/day)
 - **Gemma-3-12B** - Metadata extraction (14,400 requests/day)
 - **OpenRouter Llama 3.3** - Backup LLM (200 requests/day)
 - **Ollama** - Local fallback (unlimited)

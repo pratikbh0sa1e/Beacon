@@ -56,7 +56,7 @@ This project uses a **phase-based documentation system** for better organization
 
 ### 🤖 AI-Powered Intelligence (Google Services)
 
-- 🧠 **Gemini 2.0 Flash:** Latest Google AI for advanced reasoning and policy analysis
+- 🧠 **Gemini 2.5 Flash:** Latest Google AI for advanced reasoning and policy analysis
 - 🎤 **Voice Queries:** Google Speech-to-Text API supporting 98+ languages
 - 👁️ **Smart OCR:** Google Cloud Vision API for text extraction from images and PDFs
 - 🌍 **Multilingual:** 100+ languages including Hindi, Tamil, Telugu, Bengali
@@ -240,7 +240,7 @@ scripts/create_demo_account.bat
 
 ### 🤖 Google AI Services
 
-**Gemini 2.0 Flash Integration:**
+**Gemini 2.5 Flash Integration:**
 
 - 🧠 **Advanced Reasoning:** Latest Gemini model for complex policy analysis
 - 🌍 **Multilingual Support:** 100+ languages including Indian regional languages
@@ -352,7 +352,7 @@ scripts/create_demo_account.bat
 
 **Google Cloud AI Services:**
 
-- 🧠 **Gemini 2.0 Flash:** Advanced LLM for reasoning and analysis
+- 🧠 **Gemini 2.5 Flash:** Advanced LLM for reasoning and analysis
 - 🎤 **Speech-to-Text API:** Voice query processing (98+ languages)
 - 👁️ **Cloud Vision API:** OCR and image text extraction
 - 🌍 **Translation API:** Multi-language document support

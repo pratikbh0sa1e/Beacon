@@ -21,7 +21,7 @@ class PolicyComparisonTool:
         """
         genai.configure(api_key=google_api_key)
         self.model = genai.GenerativeModel('gemini-2.5-flash')
-        logger.info("PolicyComparisonTool initialized with Gemini 2.0 Flash")
+        logger.info("PolicyComparisonTool initialized with Gemini 2.5 Flash")
     
     def compare_policies(
         self, 

@@ -53,7 +53,7 @@ export const SystemHealthPage = () => {
       // Check AI service health
       try {
         const response = await fetch(
-          `${import.meta.env.VITE_API_URL}/chat/health`
+          `${import.meta.env.VITE_API_URL}/chat/health`,
         );
         const data = await response.json();
         setSystemStatus((prev) => ({
@@ -175,8 +175,8 @@ export const SystemHealthPage = () => {
                   overallHealth === "healthy"
                     ? "bg-green-500/10"
                     : overallHealth === "warning"
-                    ? "bg-yellow-500/10"
-                    : "bg-red-500/10"
+                      ? "bg-yellow-500/10"
+                      : "bg-red-500/10"
                 }`}
               >
                 {getStatusIcon(overallHealth)}
@@ -187,8 +187,8 @@ export const SystemHealthPage = () => {
                   {overallHealth === "healthy"
                     ? "All systems operational"
                     : overallHealth === "warning"
-                    ? "Some systems need attention"
-                    : "Critical issues detected"}
+                      ? "Some systems need attention"
+                      : "Critical issues detected"}
                 </p>
               </div>
             </div>
@@ -270,7 +270,7 @@ export const SystemHealthPage = () => {
                   <div>
                     <h3 className="font-semibold">AI Service</h3>
                     <p className="text-xs text-muted-foreground">
-                      Gemini 2.0 Flash
+                      Gemini 2.5 Flash
                     </p>
                   </div>
                 </div>
