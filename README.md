@@ -54,30 +54,40 @@ This project uses a **phase-based documentation system** for better organization
 
 ## ✨ Key Features
 
-### Document Management
-- 📄 **Multi-format Support:** PDF, DOCX, PPTX, Images (with OCR)
-- 🔍 **Smart Search:** Hybrid retrieval (semantic + keyword)
-- ⚡ **Lazy RAG:** Instant uploads, on-demand embedding
-- 📚 **Citation Tracking:** All answers include source documents
-- 🔐 **Role-Based Access:** Hierarchical document visibility
+### 🤖 AI-Powered Intelligence (Google Services)
 
-### AI-Powered Intelligence
-- 🤖 **AI Chat Assistant:** Natural language queries with cited sources
-- 🎤 **Voice Queries:** Ask questions via audio (98+ languages)
+- 🧠 **Gemini 2.0 Flash:** Latest Google AI for advanced reasoning and policy analysis
+- 🎤 **Voice Queries:** Google Speech-to-Text API supporting 98+ languages
+- 👁️ **Smart OCR:** Google Cloud Vision API for text extraction from images and PDFs
 - 🌍 **Multilingual:** 100+ languages including Hindi, Tamil, Telugu, Bengali
 - 📊 **Policy Analysis:** Compare documents, detect conflicts, check compliance
+- 🔍 **Contextual Search:** Understand intent and provide relevant answers
 
-### User & Institution Management
-- 👥 **Role Hierarchy:** Developer → Ministry Admin → University Admin → Document Officer → Student
-- 🏛️ **Institution Types:** Universities, Hospitals, Research Centers, Defense Academies
+### 📄 Document Management
+
+- 📁 **Multi-format Support:** PDF, DOCX, PPTX, Images (with Google OCR)
+- 🔍 **Hybrid Search:** Semantic + keyword search with intelligent ranking
+- ⚡ **Lazy RAG:** Instant uploads, on-demand embedding for faster processing
+- 📚 **Citation Tracking:** All AI answers include source documents with page numbers
+- 🔐 **Role-Based Access:** Hierarchical document visibility and permissions
+- 📋 **Document Families:** Group related documents for better organization
+
+### 👥 User & Institution Management
+
+- 🏛️ **Role Hierarchy:** Developer → Ministry Admin → University Admin → Document Officer → Student
+- 🏢 **Institution Types:** Universities, Hospitals, Research Centers, Defense Academies
 - ✅ **Approval Workflows:** Multi-level document and user approval system
-- 📧 **Email Verification:** Secure two-step registration process
+- 📧 **Email Verification:** Secure two-step registration with domain validation
+- 🔔 **Smart Notifications:** Contextual alerts based on role and activity
 
-### Advanced Features
-- 🔔 **Real-time Notifications:** Hierarchical notification routing
+### 🚀 Advanced Features
+
+- 📱 **Mobile-First:** Responsive design optimized for all devices
+- 🔔 **Real-time Notifications:** Hierarchical notification routing system
 - 📈 **Analytics Dashboard:** System health, activity tracking, user insights
-- 🔗 **External Data Sync:** Connect to ministry databases
-- 🎨 **Theme Support:** Light/dark mode with persistent preferences
+- 🔗 **External Data Sync:** Connect to ministry databases and APIs
+- 🎨 **Theme Support:** Light/dark mode with persistent user preferences
+- 💬 **Live Chat:** Real-time AI assistant with conversation history
 
 ---
 
@@ -192,34 +202,177 @@ Frontend will be available at: http://localhost:5173
 
 ---
 
+## 🎯 Demo Account
+
+For quick testing and demonstration purposes, a demo account is automatically created:
+
+**Demo Credentials:**
+
+```
+Email: demo@beacon.system
+Password: demo123
+Role: Student
+```
+
+**What you can test:**
+
+- ✅ Login functionality
+- ✅ Document browsing and search
+- ✅ AI chat with document queries
+- ✅ Mobile responsiveness
+- ✅ Voice queries (if microphone available)
+
+**Create Demo Account Manually:**
+
+```bash
+# Run the demo account script
+python scripts/create_demo_account.py
+
+# Or on Windows
+scripts/create_demo_account.bat
+```
+
+> **Note**: This is a demo account with limited permissions. It cannot upload documents or access admin features.
+
+---
+
+## 🚀 New Features & Google Services Integration
+
+### 🤖 Google AI Services
+
+**Gemini 2.0 Flash Integration:**
+
+- 🧠 **Advanced Reasoning:** Latest Gemini model for complex policy analysis
+- 🌍 **Multilingual Support:** 100+ languages including Indian regional languages
+- ⚡ **Fast Response:** Optimized for real-time chat interactions
+- 📊 **Context Awareness:** Understands document relationships and policy implications
+
+**Google Cloud Vision API:**
+
+- 📸 **OCR Processing:** Extract text from images and scanned documents
+- 🔍 **Handwriting Recognition:** Process handwritten notes and forms
+- 📄 **PDF Text Extraction:** Advanced text extraction from complex PDFs
+- 🌐 **Multi-language OCR:** Support for Hindi, Tamil, Telugu, Bengali, and more
+
+**Google Speech-to-Text API:**
+
+- 🎤 **Voice Queries:** Ask questions in natural language via audio
+- 🗣️ **98+ Languages:** Support for major world languages
+- 🎯 **High Accuracy:** Advanced speech recognition with punctuation
+- 📱 **Real-time Processing:** Live transcription for instant responses
+
+### 🆕 Latest Features (v2.0.0)
+
+**Enhanced Document Management:**
+
+- 📚 **Document Families:** Group related documents for better organization
+- 🔄 **Version Control:** Track document updates and changes
+- 🏷️ **Smart Tagging:** Auto-categorization based on content analysis
+- 📋 **Batch Operations:** Upload and process multiple documents simultaneously
+
+**Advanced AI Capabilities:**
+
+- 🧩 **Policy Comparison:** Side-by-side analysis of government policies
+- ⚠️ **Conflict Detection:** Identify contradictions between documents
+- ✅ **Compliance Checking:** Verify adherence to regulations and guidelines
+- 📈 **Trend Analysis:** Track policy changes over time
+
+**Smart Search & Retrieval:**
+
+- 🔍 **Hybrid Search:** Combines semantic and keyword search for better results
+- 🎯 **Contextual Ranking:** Results ranked by relevance and user role
+- 📊 **Search Analytics:** Track popular queries and document access patterns
+- 🔗 **Citation Tracking:** Full source attribution for all AI responses
+
+**Mobile-First Design:**
+
+- 📱 **Responsive UI:** Optimized for mobile devices and tablets
+- 👆 **Touch-Friendly:** Intuitive gestures and mobile navigation
+- 🔄 **Offline Support:** Basic functionality works without internet
+- 📲 **PWA Ready:** Install as a mobile app
+
+**Real-time Collaboration:**
+
+- 💬 **Live Chat:** Real-time messaging with AI assistant
+- 🔔 **Smart Notifications:** Contextual alerts based on user role and interests
+- 👥 **Team Workspaces:** Collaborative document review and approval
+- 📊 **Activity Feeds:** Track team actions and document changes
+
+**Enterprise Security:**
+
+- 🔐 **Zero-Trust Architecture:** Verify every request and user
+- 🛡️ **Data Encryption:** End-to-end encryption for sensitive documents
+- 📋 **Audit Trails:** Complete logging of all user actions
+- 🔒 **Role-Based Access:** Granular permissions based on organizational hierarchy
+
+### 🌟 Google Cloud Integration Benefits
+
+**Scalability:**
+
+- ☁️ **Auto-scaling:** Handle varying loads automatically
+- 🌍 **Global CDN:** Fast document access worldwide
+- 💾 **Unlimited Storage:** Scale storage as needed
+- ⚡ **Edge Computing:** Reduced latency with global edge locations
+
+**Reliability:**
+
+- 🔄 **99.9% Uptime:** Enterprise-grade availability
+- 🔧 **Auto-healing:** Self-recovering infrastructure
+- 📊 **Health Monitoring:** Proactive issue detection
+- 🔒 **Data Backup:** Automated backups and disaster recovery
+
+**Cost Optimization:**
+
+- 💰 **Pay-per-use:** Only pay for what you consume
+- 📊 **Usage Analytics:** Track and optimize costs
+- 🎯 **Smart Quotas:** Prevent unexpected charges
+- 💡 **Free Tier:** Generous free usage limits
+
+---
+
 ## 🏗️ System Architecture
 
 ### Technology Stack
 
 **Backend:**
+
 - FastAPI (Python 3.11+)
 - PostgreSQL with pgvector extension
-- SQLAlchemy ORM
-- Alembic migrations
-- JWT authentication
+- SQLAlchemy ORM with Alembic migrations
+- JWT authentication with role-based access
+- Redis caching for performance optimization
 
 **Frontend:**
-- React 18 with Vite
+
+- React 18 with Vite build system
 - TailwindCSS + shadcn/ui components
 - Zustand state management
-- React Router v6
-- Axios for API calls
+- React Router v6 with protected routes
+- Axios for API calls with interceptors
 
-**AI/ML:**
-- Google Gemini 2.0 Flash (LLM)
+**Google Cloud AI Services:**
+
+- 🧠 **Gemini 2.0 Flash:** Advanced LLM for reasoning and analysis
+- 🎤 **Speech-to-Text API:** Voice query processing (98+ languages)
+- 👁️ **Cloud Vision API:** OCR and image text extraction
+- 🌍 **Translation API:** Multi-language document support
+- ☁️ **Cloud Storage:** Scalable document storage
+
+**AI/ML Stack:**
+
 - BGE-M3 embeddings (multilingual, 1024-dim)
-- OpenAI Whisper (voice transcription)
-- EasyOCR (image text extraction)
-- pgvector (vector similarity search)
+- pgvector for similarity search
+- Hybrid retrieval (semantic + keyword)
+- Lazy embedding strategy for performance
+- Citation tracking and source attribution
 
-**Storage:**
-- Supabase S3 (document storage)
-- PostgreSQL (metadata + embeddings)
+**Infrastructure:**
+
+- Supabase (PostgreSQL + Storage)
+- Vercel (Frontend hosting)
+- Render (Backend hosting)
+- Upstash Redis (Caching)
+- UptimeRobot (Monitoring)
 
 ### RAG Architecture
 
@@ -230,6 +383,7 @@ Query → Search Metadata → Rerank → Embed (if needed) → Search → Answer
 ```
 
 **Lazy Embedding Strategy:**
+
 - Documents uploaded instantly (no waiting for embedding)
 - Embeddings generated on first query
 - Subsequent queries use cached embeddings
@@ -255,26 +409,28 @@ Public Viewer (Limited Access)
 
 ### Role Permissions
 
-| Feature | Developer | Ministry Admin | University Admin | Document Officer | Student |
-|---------|-----------|----------------|------------------|------------------|---------|
-| View all documents | ✅ | ✅ (restricted) | ✅ (institution) | ✅ (institution) | ✅ (public) |
-| Upload documents | ✅ | ✅ (auto-approved) | ✅ (needs approval) | ✅ (needs approval) | ❌ |
-| Approve documents | ✅ | ✅ | ✅ (institution) | ❌ | ❌ |
-| Manage users | ✅ | ✅ (limited) | ✅ (institution) | ❌ | ❌ |
-| System health | ✅ | ❌ | ❌ | ❌ | ❌ |
-| Analytics | ✅ | ✅ | ✅ (institution) | ❌ | ❌ |
+| Feature            | Developer | Ministry Admin     | University Admin    | Document Officer    | Student     |
+| ------------------ | --------- | ------------------ | ------------------- | ------------------- | ----------- |
+| View all documents | ✅        | ✅ (restricted)    | ✅ (institution)    | ✅ (institution)    | ✅ (public) |
+| Upload documents   | ✅        | ✅ (auto-approved) | ✅ (needs approval) | ✅ (needs approval) | ❌          |
+| Approve documents  | ✅        | ✅                 | ✅ (institution)    | ❌                  | ❌          |
+| Manage users       | ✅        | ✅ (limited)       | ✅ (institution)    | ❌                  | ❌          |
+| System health      | ✅        | ❌                 | ❌                  | ❌                  | ❌          |
+| Analytics          | ✅        | ✅                 | ✅ (institution)    | ❌                  | ❌          |
 
 ---
 
 ## 📡 API Endpoints
 
 ### Authentication
+
 - `POST /api/auth/register` - User registration
 - `POST /api/auth/login` - User login
 - `POST /api/auth/verify-email/{token}` - Email verification
 - `GET /api/auth/me` - Get current user
 
 ### Documents
+
 - `POST /api/documents/upload` - Upload document
 - `GET /api/documents/list` - List documents (role-filtered)
 - `GET /api/documents/{id}` - Get document details
@@ -282,26 +438,31 @@ Public Viewer (Limited Access)
 - `DELETE /api/documents/{id}` - Delete document
 
 ### Approvals
+
 - `GET /api/approvals/pending` - Get pending documents
 - `POST /api/approvals/{id}/approve` - Approve document
 - `POST /api/approvals/{id}/reject` - Reject document
 
 ### Chat & AI
+
 - `POST /api/chat/query` - Ask AI question
 - `POST /api/voice/query` - Voice query (audio upload)
 - `GET /api/chat/sessions` - Get chat history
 
 ### Institutions
+
 - `GET /api/institutions/list` - List institutions
 - `POST /api/institutions/create` - Create institution
 - `DELETE /api/institutions/{id}` - Delete institution
 
 ### Notifications
+
 - `GET /api/notifications/list` - List notifications
 - `GET /api/notifications/unread-count` - Unread count
 - `POST /api/notifications/{id}/mark-read` - Mark as read
 
 ### Analytics
+
 - `GET /api/analytics/stats` - System statistics
 - `GET /api/analytics/activity` - Activity feed
 - `GET /api/audit/logs` - Audit logs
@@ -328,13 +489,13 @@ python tests/test_conflict_detection_api.py
 
 ## 📊 Performance Metrics
 
-| Operation | Time | Notes |
-|-----------|------|-------|
-| Document Upload | 3-7s | Instant response |
-| Query (embedded) | 4-7s | Fast |
-| Query (first time) | 12-19s | Includes embedding |
-| Voice transcription | 5-10s | 1 min audio |
-| User Login | <1s | JWT generation |
+| Operation           | Time   | Notes              |
+| ------------------- | ------ | ------------------ |
+| Document Upload     | 3-7s   | Instant response   |
+| Query (embedded)    | 4-7s   | Fast               |
+| Query (first time)  | 12-19s | Includes embedding |
+| Voice transcription | 5-10s  | 1 min audio        |
+| User Login          | <1s    | JWT generation     |
 
 ---
 
@@ -392,6 +553,7 @@ Beacon__V1/
 ## 🐛 Troubleshooting
 
 ### Database Connection Issues
+
 ```bash
 # Check PostgreSQL is running
 psql -h HOST -U USER -d DATABASE
@@ -401,12 +563,14 @@ psql -h HOST -U USER -d DATABASE
 ```
 
 ### GPU Not Detected
+
 ```bash
 # Install PyTorch with CUDA support
 pip install torch --index-url https://download.pytorch.org/whl/cu118
 ```
 
 ### Voice Not Working
+
 ```bash
 # Install FFmpeg
 # Windows: Download from https://ffmpeg.org/download.html
@@ -415,6 +579,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu118
 ```
 
 ### Email Verification Not Sending
+
 ```bash
 # For Gmail:
 # 1. Enable 2-Factor Authentication
@@ -427,6 +592,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu118
 ## 🔄 Recent Updates
 
 ### Version 2.0.0 (December 2025)
+
 - ✅ Migrated from FAISS to pgvector for multi-machine support
 - ✅ Implemented lazy RAG for instant document uploads
 - ✅ Added email verification system
@@ -457,7 +623,7 @@ pip install torch --index-url https://download.pytorch.org/whl/cu118
 ✅ Hybrid retrieval (semantic + keyword)  
 ✅ External data ingestion  
 ✅ Citation tracking  
-✅ Production-ready  
+✅ Production-ready
 
 ---
 

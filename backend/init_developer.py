@@ -5,7 +5,7 @@ import os
 from sqlalchemy.orm import Session
 import bcrypt
 from backend.database import SessionLocal, User
-from backend.constants.roles import DEVELOPER
+from backend.constants.roles import DEVELOPER, STUDENT
 
 
 # def generate_secure_password(length: int = 32) -> str:
@@ -29,6 +29,63 @@ def generate_secure_password(length: int = 32) -> str:
 def hash_password(password: str) -> str:
     """Hash password using bcrypt"""
     return bcrypt.hashpw(password.encode('utf-8'), bcrypt.gensalt()).decode('utf-8')
+
+
+def initialize_demo_account():
+    """
+    Create demo account for testing purposes
+    
+    Demo Account Details:
+    - Email: demo@beacon.system
+    - Password: demo123
+    - Role: student (safe role with limited permissions)
+    - Pre-approved for immediate access
+    """
+    db: Session = SessionLocal()
+    
+    try:
+        # Check if demo account exists
+        demo_user = db.query(User).filter(User.email == "demo@beacon.system").first()
+        
+        if demo_user:
+            print("✓ Demo account already exists")
+            print("  Email: demo@beacon.system")
+            print("  Password: demo123")
+            return
+        
+        # Create demo account with simple password
+        demo_password = "demo123"
+        password_hash = hash_password(demo_password)
+        
+        demo_user = User(
+            name="Demo User",
+            email="demo@beacon.system",
+            password_hash=password_hash,
+            role=STUDENT,  # Safe role for demo
+            institution_id=None,
+            approved=True,  # Pre-approved for immediate access
+            email_verified=True  # Pre-verified for convenience
+        )
+        
+        db.add(demo_user)
+        db.commit()
+        
+        print("\n" + "="*60)
+        print("🎯 DEMO ACCOUNT CREATED")
+        print("="*60)
+        print(f"Email: demo@beacon.system")
+        print(f"Password: demo123")
+        print(f"Role: Student")
+        print("="*60)
+        print("✅ Account is pre-approved and ready to use!")
+        print("🔓 Use this for testing and demonstrations")
+        print("="*60 + "\n")
+        
+    except Exception as e:
+        print(f"❌ Error creating demo account: {str(e)}")
+        db.rollback()
+    finally:
+        db.close()
 
 
 def initialize_developer_account():
@@ -82,7 +139,8 @@ def initialize_developer_account():
                 password_hash=password_hash,
                 role=DEVELOPER,  # Use constant instead of hardcoded string
                 institution_id=None,
-                approved=True
+                approved=True,
+                email_verified=True  # Pre-verified for convenience
             )
             
             db.add(developer)
@@ -107,4 +165,7 @@ def initialize_developer_account():
 
 if __name__ == "__main__":
     # Can be run standalone for testing
+    print("Initializing accounts...")
     initialize_developer_account()
+    initialize_demo_account()
+    print("Account initialization complete!")

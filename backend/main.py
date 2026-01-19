@@ -63,6 +63,10 @@ Base.metadata.create_all(bind=engine)
 # Initialize developer account on first run
 initialize_developer_account()
 
+# Initialize demo account for testing
+from backend.init_developer import initialize_demo_account
+initialize_demo_account()
+
 app = FastAPI(
     title="BEACON - Government Policy Intelligence Platform",
     description="AI-powered document management and policy analysis system with role-based access control",

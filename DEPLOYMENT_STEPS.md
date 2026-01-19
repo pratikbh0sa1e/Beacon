@@ -110,6 +110,36 @@ Your Supabase database is already configured. The connection details are in the 
    - Interval: 5 minutes
    - This keeps your Render app awake on free tier
 
+## 🎯 Demo Account
+
+A demo account is automatically created for testing purposes:
+
+**Demo Account Credentials:**
+
+- **Email**: `demo@beacon.system`
+- **Password**: `demo123`
+- **Role**: Student (safe permissions)
+- **Status**: Pre-approved and verified
+
+**Demo Account Features:**
+
+- ✅ Browse and search documents
+- ✅ Use AI chat functionality
+- ✅ Test mobile responsiveness
+- ✅ View document details
+- ❌ Cannot upload documents (student role)
+- ❌ Cannot access admin features
+
+**Manual Demo Account Creation:**
+
+```bash
+# Run the demo account script
+python scripts/create_demo_account.py
+
+# Or on Windows
+scripts/create_demo_account.bat
+```
+
 ## 📊 Free Tier Quotas
 
 ### Google Cloud APIs (with Quota Management)
