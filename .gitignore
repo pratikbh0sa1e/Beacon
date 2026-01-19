@@ -54,6 +54,7 @@ uv.lock
 **/.env
 **/.env.*
 render.env
+vercel.env
 
 
 

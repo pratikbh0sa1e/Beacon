@@ -377,7 +377,7 @@ class PolicyRAGAgent:
                 class QuotaManagedGeminiWrapper:
                     def __init__(self, base_llm, quota_manager_instance):
                         self._base_llm = base_llm
-                        self.quota_manager = quota_manager_instance  # Fixed: use self.quota_manager
+                        self._quota_manager = quota_manager_instance  # Fixed: use _quota_manager
                         # Copy important attributes from base model
                         self.model_name = base_llm.model_name if hasattr(base_llm, 'model_name') else "gemini-2.5-flash"
                         self.temperature = base_llm.temperature if hasattr(base_llm, 'temperature') else temperature
@@ -390,7 +390,7 @@ class PolicyRAGAgent:
                         """Generate response with quota management"""
                         try:
                             # Check quota before making API call
-                            allowed, error_msg, quota_info = self.quota_manager.check_quota("gemini_chat", 1)
+                            allowed, error_msg, quota_info = self._quota_manager.check_quota("gemini_chat", 1)
                             if not allowed:
                                 # Return quota exceeded message
                                 from langchain_core.messages import AIMessage
@@ -400,7 +400,7 @@ class PolicyRAGAgent:
                             result = self._base_llm.invoke(messages, **kwargs)
                             
                             # Consume quota after successful API call
-                            self.quota_manager.consume_quota("gemini_chat", 1)
+                            self._quota_manager.consume_quota("gemini_chat", 1)
                             
                             return result
                             

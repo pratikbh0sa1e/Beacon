@@ -1,318 +1,174 @@
-# 🚀 BEACON Platform - Complete Deployment Guide
+# Free-Tier Cloud Deployment Guide
+
+## ✅ System Status
 
-## Ready for FREE Cloud Deployment!
+- **RAG Agent**: Fixed and working with quota management
+- **OCR Service**: Updated to use Google Cloud Vision API
+- **Reranker**: Configured to use OpenRouter (preserves Gemini quota)
+- **Dependencies**: Optimized for 512MB RAM deployment
+- **Quota Management**: Active for all Google Cloud services
+
+## 🚀 Deployment Steps
+
+### 1. Frontend Deployment (Vercel)
+
+1. **Connect Repository to Vercel**
 
-Your BEACON Platform is now optimized for **$0/month** deployment with quota management.
+   ```bash
+   # Push your code to GitHub first
+   git add .
+   git commit -m "Ready for deployment"
+   git push origin main
+   ```
 
----
+2. **Deploy on Vercel**
+   - Go to [vercel.com](https://vercel.com)
+   - Import your GitHub repository
+   - Set build settings:
+     - **Framework**: Vite
+     - **Root Directory**: `frontend`
+     - **Build Command**: `npm run build`
+     - **Output Directory**: `dist`
 
-## 📋 Pre-Deployment Checklist
+3. **Environment Variables** (Vercel Dashboard)
+   ```
+   VITE_API_URL=https://your-render-app.onrender.com
+   ```
 
-✅ **Quota Management System**: Active and tested  
-✅ **Cloud-Only Mode**: Configured (`CLOUD_ONLY_MODE=true`)  
-✅ **Google API Key**: Valid and working  
-✅ **Supabase Database**: Connected and configured  
-✅ **Vercel Config**: Created (`vercel.json`, `_redirects`)  
-✅ **Requirements**: Optimized for 512MB RAM
+### 2. Backend Deployment (Render)
 
----
+1. **Connect Repository to Render**
+   - Go to [render.com](https://render.com)
+   - Create new Web Service
+   - Connect your GitHub repository
 
-## 🚀 Step-by-Step Deployment
+2. **Build Settings**
 
-### Step 1: Push to GitHub
+   ```
+   Build Command: pip install -r requirements.txt
+   Start Command: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
+   ```
 
-```bash
-# Add all changes
-git add .
+3. **Environment Variables** (Copy from render.env)
 
-# Commit with deployment message
-git commit -m "Add quota management system for free-tier deployment"
+   ```bash
+   # Core Configuration
+   CLOUD_ONLY_MODE=true
 
-# Push to GitHub
-git push origin main
-```
+   # Database (Supabase)
+   DATABASE_HOSTNAME=aws-1-ap-south-1.pooler.supabase.com
+   DATABASE_PORT=5432
+   DATABASE_NAME=postgres
+   DATABASE_USERNAME=postgres.ppqdbqzlfxddfroxlycx
+   DATABASE_PASSWORD=suyashgandu
 
-### Step 2: Deploy Backend to Render
+   # Google API (Free Tier with Quota Management)
+   GOOGLE_API_KEY=AIzaSyBtrkvDpYbWLQZStyD8x8tOtnOHgme4jsE
 
-1. **Go to [render.com](https://render.com)**
-2. **Sign up/Login** with GitHub
-3. **Click "New +"** → **"Web Service"**
-4. **Connect your GitHub repository**
-5. **Configure the service:**
+   # OpenRouter (Free Models)
+   OPENROUTER_API_KEY=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
+   OPENROUTER_MODEL=meta-llama/llama-3.3-70b-instruct:free
 
-```yaml
-Name: beacon-backend
-Environment: Python 3
-Branch: main
-Root Directory: (leave empty)
-Build Command: pip install -r requirements.txt
-Start Command: uvicorn backend.main:app --host 0.0.0.0 --port $PORT
-```
+   # LLM Providers (Optimized for Free Tier)
+   METADATA_LLM_PROVIDER=gemini
+   RAG_LLM_PROVIDER=gemini
+   RERANKER_PROVIDER=openrouter
 
-6. **Add Environment Variables:**
+   # Supabase Storage
+   SUPABASE_URL=https://ppqdbqzlfxddfroxlycx.supabase.co
+   SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwcWRicXpsZnhkZGZyb3hseWN4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTIwMDM5MCwiZXhwIjoyMDgwNzc2MzkwfQ.ervBHaedSRli3mkphPGSypsfuRaMll56bt4GNsK1xIk
+   SUPABASE_BUCKET_NAME=Docs
 
-```env
-CLOUD_ONLY_MODE=true
-GOOGLE_API_KEY=AIzaSyBtrkvDpYbWLQZStyD8x8tOtnOHgme4jsE
-DATABASE_HOSTNAME=aws-1-ap-south-1.pooler.supabase.com
-DATABASE_PORT=5432
-DATABASE_NAME=postgres
-DATABASE_USERNAME=postgres.ppqdbqzlfxddfroxlycx
-DATABASE_PASSWORD=suyashgandu
-SUPABASE_URL=https://ppqdbqzlfxddfroxlycx.supabase.co
-SUPABASE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InBwcWRicXpsZnhkZGZyb3hseWN4Iiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc2NTIwMDM5MCwiZXhwIjoyMDgwNzc2MzkwfQ.ervBHaedSRli3mkphPGSypsfuRaMll56bt4GNsK1xIk
-SUPABASE_BUCKET_NAME=Docs
-JWT_SECRET_KEY=OZrP1ApDGpllI527XGMYupgBXATfNLyYYRAGYwenYUg
-METADATA_LLM_PROVIDER=gemini
-RAG_LLM_PROVIDER=gemini
-RERANKER_PROVIDER=gemini
-```
+   # Security
+   JWT_SECRET_KEY=OZrP1ApDGpllI527XGMYupgBXATfNLyYYRAGYwenYUg
+   SECRET_KEY=mx7c1dF3CC51449E8674654DBbCC04211f1
 
-7. **Click "Create Web Service"**
+   # Email (Gmail SMTP)
+   SMTP_HOST=smtp.gmail.com
+   SMTP_PORT=587
+   SMTP_USER=beacon.system.67@gmail.com
+   SMTP_PASSWORD=qzyawbepdaccunzh
+   FROM_EMAIL=beacon.system.67@gmail.com
+   FROM_NAME=BEACON System
 
-### Step 3: Deploy Frontend to Vercel
+   # Redis (Upstash)
+   REDIS_URL=rediss://default:Aa1FAAIncDJmOWM1MjMzNTMxMGI0MTQ3YjVhYjg5OTUzMjZkNzg2MnAyNDQzNTc@included-krill-44357.upstash.io:6379
+   ```
 
-1. **Go to [vercel.com](https://vercel.com)**
-2. **Sign up/Login** with GitHub
-3. **Click "New Project"**
-4. **Import your GitHub repository**
-5. **Vercel will auto-detect settings** from `vercel.json`
-6. **Add Environment Variable:**
+### 3. Database Setup (Supabase)
 
-```env
-VITE_API_BASE_URL=https://your-render-app.onrender.com/api
-```
+Your Supabase database is already configured. The connection details are in the environment variables above.
 
-_Replace `your-render-app` with your actual Render app name_
+### 4. Monitoring Setup (UptimeRobot)
 
-7. **Deploy!**
+1. **Create UptimeRobot Account** (Free)
+   - Go to [uptimerobot.com](https://uptimerobot.com)
+   - Sign up for free account
 
-### Step 4: Setup UptimeRobot (Keep Render Awake)
+2. **Add HTTP Monitor**
+   - URL: `https://your-render-app.onrender.com/health`
+   - Interval: 5 minutes
+   - This keeps your Render app awake on free tier
 
-1. **Go to [uptimerobot.com](https://uptimerobot.com)**
-2. **Create free account**
-3. **Add HTTP(s) monitor:**
-   - **URL**: `https://your-render-app.onrender.com/health`
-   - **Monitoring Interval**: 5 minutes
-   - **Alert Contacts**: Your email
+## 📊 Free Tier Quotas
 
-This prevents your Render app from sleeping on the free tier.
+### Google Cloud APIs (with Quota Management)
 
----
+- **Gemini Embeddings**: 1,500 requests/day
+- **Gemini Chat**: 1,500 requests/day, 15/minute
+- **Speech-to-Text**: 60 minutes/month
+- **Vision OCR**: 1,000 requests/month
 
-## 🎯 Expected Results
+### OpenRouter (Free Models)
 
-After successful deployment:
+- **Llama 3.3 70B**: 200 requests/day
+- **Gemini 2.0 Flash**: 200 requests/day
 
-### Backend URLs
+### Infrastructure
 
-- **API Base**: `https://your-render-app.onrender.com`
-- **API Docs**: `https://your-render-app.onrender.com/docs`
-- **Health Check**: `https://your-render-app.onrender.com/health`
-- **Quota Status**: `https://your-render-app.onrender.com/quota/status`
+- **Vercel**: Unlimited static hosting
+- **Render**: 750 hours/month (free tier)
+- **Supabase**: 500MB database, 1GB bandwidth
+- **Upstash Redis**: 10,000 requests/day
 
-### Frontend URL
+## 🔧 Quota Management Features
 
-- **Web App**: `https://your-vercel-app.vercel.app`
+The system automatically:
 
----
+- ✅ Tracks usage for all APIs
+- ✅ Shows "quota exceeded" errors instead of charges
+- ✅ Falls back to alternative services when possible
+- ✅ Resets quotas daily/monthly as appropriate
+- ✅ Provides quota status in admin dashboard
 
-## 🔧 Vercel Configuration Explained
+## 🚨 Important Notes
 
-### `vercel.json` Features:
+1. **Render Free Tier**: Apps sleep after 15 minutes of inactivity
+   - **Solution**: UptimeRobot pings every 5 minutes to keep awake
+   - **Limitation**: 750 hours/month total (about 25 days)
 
-- ✅ **SPA Routing**: All routes redirect to `index.html` (fixes 404s)
-- ✅ **Security Headers**: XSS protection, content type sniffing prevention
-- ✅ **Caching**: Static assets cached for 1 year
-- ✅ **API Proxy**: Routes `/api/*` to your Render backend
+2. **Memory Limit**: 512MB RAM on Render free tier
+   - **Solution**: Removed heavy dependencies (sentence-transformers, whisper, easyocr)
+   - **Alternative**: Using cloud APIs instead of local models
 
-### `_redirects` (Backup):
+3. **Cold Starts**: First request after sleep takes 30-60 seconds
+   - **Solution**: UptimeRobot keeps app warm during business hours
 
-- ✅ **Fallback routing** for any missed routes
-- ✅ **API proxying** as backup
+## 🎯 Next Steps
 
----
+1. **Deploy Frontend**: Push to Vercel
+2. **Deploy Backend**: Push to Render with environment variables
+3. **Setup Monitoring**: Configure UptimeRobot
+4. **Test System**: Verify all features work in production
+5. **Monitor Quotas**: Check usage in admin dashboard
 
-## 📊 Testing Your Deployment
+## 📞 Support
 
-### 1. Test Backend Health
+If you encounter issues:
 
-```bash
-curl https://your-render-app.onrender.com/health
-```
+1. Check Render logs for backend errors
+2. Check Vercel function logs for frontend issues
+3. Verify all environment variables are set correctly
+4. Monitor quota usage in the admin dashboard
 
-Expected response:
-
-```json
-{
-  "status": "healthy",
-  "database": "connected",
-  "services": [
-    "auth",
-    "documents",
-    "chat",
-    "approvals",
-    "data-sources",
-    "insights"
-  ]
-}
-```
-
-### 2. Test Quota Status
-
-```bash
-curl https://your-render-app.onrender.com/quota/status
-```
-
-Expected response:
-
-```json
-{
-  "status": "success",
-  "quota_status": {
-    "gemini_embeddings": {
-      "daily": { "used": 0, "limit": 1500, "remaining": 1500 }
-    },
-    "gemini_chat": { "daily": { "used": 0, "limit": 1500, "remaining": 1500 } },
-    "speech_to_text": {
-      "monthly": { "used": 0, "limit": 60, "remaining": 60 }
-    },
-    "vision_ocr": { "monthly": { "used": 0, "limit": 1000, "remaining": 1000 } }
-  }
-}
-```
-
-### 3. Test Frontend
-
-Visit your Vercel URL and verify:
-
-- ✅ App loads correctly
-- ✅ Navigation works (no 404s)
-- ✅ API calls work
-- ✅ Login/registration functions
-
----
-
-## 💰 Cost Breakdown: $0/month
-
-| Service           | Free Tier                  | Usage                   |
-| ----------------- | -------------------------- | ----------------------- |
-| **Render**        | 512MB RAM, 750 hours/month | Backend hosting         |
-| **Vercel**        | 100GB bandwidth/month      | Frontend hosting        |
-| **Supabase**      | 500MB DB, 1GB storage      | Database + file storage |
-| **Google Gemini** | 1,500 requests/day         | AI embeddings + chat    |
-| **Google Speech** | 60 minutes/month           | Voice queries           |
-| **Google Vision** | 1,000 requests/month       | OCR processing          |
-| **UptimeRobot**   | 50 monitors                | Keep app awake          |
-
-**Total: $0/month** 🎉
-
----
-
-## 🚨 Troubleshooting
-
-### Backend Deployment Issues
-
-**Build fails:**
-
-- Check `requirements.txt` is in root directory
-- Verify Python version compatibility
-- Check Render build logs
-
-**App crashes:**
-
-- Verify all environment variables are set
-- Check database connection
-- Review Render logs
-
-**Memory issues:**
-
-- Ensure `CLOUD_ONLY_MODE=true`
-- Verify no local AI models are loading
-
-### Frontend Deployment Issues
-
-**404 errors on routes:**
-
-- Verify `vercel.json` is in root directory
-- Check `_redirects` file in frontend folder
-- Ensure SPA routing is configured
-
-**API calls fail:**
-
-- Verify `VITE_API_BASE_URL` points to correct Render URL
-- Check CORS settings in backend
-- Verify backend is running
-
-### Quota Issues
-
-**"Quota exceeded" errors:**
-
-- Check `/quota/status` endpoint
-- Wait for quota reset (daily/monthly)
-- Verify quota limits in code
-
----
-
-## 📈 Monitoring & Maintenance
-
-### Daily Monitoring
-
-- Check UptimeRobot status
-- Monitor quota usage at `/quota/status`
-- Review Render logs for errors
-
-### Weekly Tasks
-
-- Check Vercel deployment status
-- Review quota usage patterns
-- Monitor database storage usage
-
-### Monthly Tasks
-
-- Review quota limits and usage
-- Check for any security updates
-- Monitor performance metrics
-
----
-
-## 🎉 Success Checklist
-
-After deployment, verify:
-
-- [ ] Backend health check returns 200
-- [ ] Frontend loads without errors
-- [ ] User registration/login works
-- [ ] Document upload functions
-- [ ] AI chat responds correctly
-- [ ] Quota tracking is active
-- [ ] UptimeRobot monitoring is active
-- [ ] All routes work (no 404s)
-- [ ] API documentation is accessible
-- [ ] Mobile responsiveness works
-
----
-
-## 🔗 Useful Links
-
-- **Render Dashboard**: https://dashboard.render.com
-- **Vercel Dashboard**: https://vercel.com/dashboard
-- **Supabase Dashboard**: https://app.supabase.com
-- **UptimeRobot Dashboard**: https://uptimerobot.com/dashboard
-- **Google AI Studio**: https://ai.google.dev
-
----
-
-## 🎯 Next Steps After Deployment
-
-1. **Test all features** thoroughly
-2. **Set up monitoring alerts**
-3. **Document your deployment URLs**
-4. **Share with stakeholders**
-5. **Plan for scaling** when you outgrow free tiers
-
----
-
-**🎉 Congratulations!** Your BEACON Platform is now deployed and running completely **FREE** in the cloud with automatic quota management!
-
-The system will automatically prevent you from exceeding free tier limits while providing a smooth user experience.
+Your system is now optimized for completely free deployment! 🎉

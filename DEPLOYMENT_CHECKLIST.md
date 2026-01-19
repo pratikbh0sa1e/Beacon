@@ -80,17 +80,17 @@ Copy ALL variables from `render.env` to Render's environment variables section:
 
 ## ⚡ Vercel Deployment Steps
 
-### 1. Update API URLs
+### 1. Environment Variables for Vercel
 
-Before deploying frontend, update the Vercel config:
+Add these in Vercel Dashboard → Project → Settings → Environment Variables:
 
-In `vercel.json`, replace:
+**From `vercel.env`:**
 
-```json
-"dest": "https://your-render-app.onrender.com/api/$1"
+```
+VITE_API_URL=https://your-render-app.onrender.com
 ```
 
-With your actual Render URL.
+**IMPORTANT**: Replace `your-render-app` with your actual Render service name.
 
 ### 2. Deploy to Vercel
 
@@ -102,10 +102,10 @@ npm run build  # Test build locally
 
 Then either:
 
-- **Option A**: Connect GitHub repo to Vercel dashboard
+- **Option A**: Connect GitHub repo to Vercel dashboard (recommended)
 - **Option B**: Use Vercel CLI: `npx vercel --prod`
 
-### 3. Update Environment Variables
+### 3. Update Backend CORS
 
 In Render, update `FRONTEND_URL` to your Vercel URL:
 

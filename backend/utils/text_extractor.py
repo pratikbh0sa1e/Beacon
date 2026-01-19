@@ -1,5 +1,4 @@
 import fitz
-import easyocr
 from docx import Document as DocxDocument
 from pptx import Presentation
 from PIL import Image
@@ -7,8 +6,14 @@ import io
 import os
 from pptx import Presentation
 
-# Legacy reader for backward compatibility
-reader = easyocr.Reader(['en', 'hi'])
+# Cloud OCR service for deployment
+def get_cloud_ocr():
+    """Get cloud OCR service instance"""
+    try:
+        from backend.utils.cloud_ocr_service import get_ocr_service
+        return get_ocr_service()
+    except ImportError:
+        return None
 
 def extract_text_from_pdf(file_path: str) -> str:
     """
@@ -26,8 +31,20 @@ def extract_text_from_pdf(file_path: str) -> str:
             pix = page.get_pixmap()
             img_data = pix.tobytes("png")
             img = Image.open(io.BytesIO(img_data))
-            ocr_result = reader.readtext(img_data, detail=0)
-            text += " ".join(ocr_result)
+            
+            # Use cloud OCR service
+            ocr_service = get_cloud_ocr()
+            if ocr_service:
+                try:
+                    # Save image temporarily for OCR
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+                        img.save(temp_file.name)
+                        ocr_result = ocr_service.extract_text_from_image(temp_file.name)
+                        text += ocr_result.get("text", "")
+                        os.unlink(temp_file.name)
+                except Exception as e:
+                    print(f"OCR failed: {e}")
     
     doc.close()
     return text.strip()
@@ -39,9 +56,18 @@ def extract_text_from_docx(file_path: str) -> str:
     return text.strip()
 
 def extract_text_from_image(file_path: str) -> str:
-    """Extract text from image using EasyOCR"""
-    result = reader.readtext(file_path, detail=0)
-    return " ".join(result)
+    """Extract text from image using Cloud OCR"""
+    ocr_service = get_cloud_ocr()
+    if ocr_service:
+        try:
+            result = ocr_service.extract_text_from_image(file_path)
+            return result.get("text", "")
+        except Exception as e:
+            print(f"OCR failed: {e}")
+            return ""
+    else:
+        print("OCR service not available")
+        return ""
 
 def extract_text_from_pptx(file_path: str) -> str:
     """Extract text from PPTX"""

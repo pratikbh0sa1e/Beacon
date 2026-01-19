@@ -20,18 +20,13 @@ _ocr_reader = None
 
 
 def get_ocr_reader():
-    """Lazy initialization of EasyOCR reader"""
-    global _ocr_reader
-    if _ocr_reader is None:
-        try:
-            import easyocr
-            logger.info("Initializing EasyOCR reader (English + Hindi)...")
-            _ocr_reader = easyocr.Reader(['en', 'hi'], gpu=False)
-            logger.info("EasyOCR reader initialized successfully")
-        except Exception as e:
-            logger.error(f"Failed to initialize EasyOCR: {str(e)}")
-            raise
-    return _ocr_reader
+    """Get cloud OCR service for text extraction"""
+    try:
+        from backend.utils.cloud_ocr_service import get_ocr_service
+        return get_ocr_service()
+    except ImportError as e:
+        logger.error(f"Failed to import cloud OCR service: {str(e)}")
+        return None
 
 
 class TextExtractionService:
@@ -261,12 +256,22 @@ class TextExtractionService:
                 pix = page.get_pixmap(matrix=fitz.Matrix(2, 2))  # 2x zoom for better OCR
                 img_data = pix.tobytes("png")
                 
-                # Run OCR directly on image bytes
-                # EasyOCR accepts: file path, URL, bytes, or numpy array
-                results = reader.readtext(img_data, detail=0)  # detail=0 returns only text
-                page_text = ' '.join(results)
-                text_parts.append(page_text)
-                pages_processed += 1
+                # Use cloud OCR service
+                try:
+                    import tempfile
+                    with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as temp_file:
+                        temp_file.write(img_data)
+                        temp_file.flush()
+                        
+                        ocr_result = reader.extract_text_from_image(temp_file.name)
+                        page_text = ocr_result.get("text", "")
+                        text_parts.append(page_text)
+                        pages_processed += 1
+                        
+                        os.unlink(temp_file.name)
+                except Exception as e:
+                    logger.error(f"OCR failed for page {page_num + 1}: {e}")
+                    # Continue with next page
             
             doc.close()
             
