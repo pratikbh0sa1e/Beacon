@@ -53,6 +53,7 @@ uv.lock
 *.env
 **/.env
 **/.env.*
+render.env
 
 
 

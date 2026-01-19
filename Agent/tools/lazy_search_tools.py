@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 # Initialize shared components
 embedder = BGEEmbedder()
 retriever = HybridRetriever(vector_weight=0.7, bm25_weight=0.3)
-reranker = DocumentReranker(provider="gemini")
+reranker = DocumentReranker()  # Use environment RERANKER_PROVIDER
 lazy_embedder = LazyEmbedder()
 pgvector_store = PGVectorStore()
 

@@ -1,10 +1,11 @@
-"""Document reranker for Lazy RAG - modular design"""
+"""Document reranker for Lazy RAG - modular design with quota management"""
 import logging
 from typing import List, Dict
 from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 import os
+from backend.utils.quota_manager import get_quota_manager, QuotaExceededException
 
 # Setup logging
 log_dir = Path("Agent/agent_logs")
@@ -20,19 +21,30 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentReranker:
-    """Rerank documents based on query relevance"""
+    """Rerank documents based on query relevance with quota management"""
     
     def __init__(self, provider: str = None, google_api_key: str = None):
         """
-        Initialize reranker with multi-provider support
+        Initialize reranker with multi-provider support and quota management
         
         Args:
             provider: LLM provider ("openrouter", "gemini", "local") - defaults to env RERANKER_PROVIDER
             google_api_key: Google API key (required for gemini provider)
         """
+        # Check if cloud-only mode is enabled
+        self.cloud_only = os.getenv("CLOUD_ONLY_MODE", "true").lower() == "true"
+        
         # Get provider from parameter or environment
-        self.provider = provider or os.getenv("RERANKER_PROVIDER", "gemini")
+        self.provider = provider or os.getenv("RERANKER_PROVIDER", "openrouter" if self.cloud_only else "local")
         self.google_api_key = google_api_key or os.getenv("GOOGLE_API_KEY")
+        
+        # Initialize quota manager
+        self.quota_manager = get_quota_manager()
+        
+        # Force cloud provider in cloud-only mode
+        if self.cloud_only and self.provider == "local":
+            self.provider = "openrouter"  # Prefer OpenRouter to save Gemini quota
+            logger.info("Cloud-only mode enabled - switching reranker from local to OpenRouter")
         
         # Initialize LLM
         self.llm = self._initialize_llm()
@@ -70,7 +82,7 @@ class DocumentReranker:
                     logger.warning("GOOGLE_API_KEY not found - Gemini unavailable")
                     return None
                 
-                logger.info("Initializing Gemini (gemini-1.5-flash) reranker")
+                logger.info("Initializing Gemini (gemini-1.5-flash) reranker with quota management")
                 return ChatGoogleGenerativeAI(
                     model="gemini-1.5-flash",
                     google_api_key=self.google_api_key,
@@ -78,6 +90,9 @@ class DocumentReranker:
                 )
             
             elif self.provider == "local":
+                if self.cloud_only:
+                    logger.warning("Local reranker not available in cloud-only mode, falling back to simple scoring")
+                    return None
                 # Placeholder for future local model implementation
                 logger.info("Local reranker selected - will use simple scoring")
                 return None
@@ -110,8 +125,22 @@ class DocumentReranker:
             return self._simple_rerank(query, documents, top_k)
     
     def _llm_rerank(self, query: str, documents: List[Dict], top_k: int) -> List[Dict]:
-        """Rerank using LLM (Gemini or OpenRouter)"""
+        """Rerank using LLM (Gemini or OpenRouter) with quota management"""
         try:
+            # Check quota before making API call (only for Gemini)
+            if self.provider == "gemini":
+                try:
+                    allowed, error_msg, quota_info = self.quota_manager.check_quota("gemini_chat", 1)
+                    if not allowed:
+                        logger.warning(f"Reranker quota exceeded: {error_msg}")
+                        logger.info("Falling back to simple reranking due to quota limits")
+                        return self._simple_rerank(query, documents, top_k)
+                except Exception as e:
+                    logger.error(f"Error checking quota: {e}")
+                    return self._simple_rerank(query, documents, top_k)
+            
+            # Note: OpenRouter has separate quota (200 requests/day) so no quota check needed
+            
             # Format documents for LLM
             doc_list = []
             for i, doc in enumerate(documents):
@@ -149,10 +178,17 @@ Example: If available IDs are [17, 18, 19, 20, 21] and you want to rank them, re
             logger.info(f"Calling {self.provider} for reranking...")
             response = self.llm.invoke(prompt)
             
+            # Consume quota after successful API call (only for Gemini)
+            if self.provider == "gemini":
+                try:
+                    self.quota_manager.consume_quota("gemini_chat", 1)
+                except Exception as e:
+                    logger.error(f"Error consuming quota: {e}")
+            
             # Parse response
             import json
             response_text = response.content.strip()
-            logger.debug(f"Gemini response: {response_text}")
+            logger.debug(f"{self.provider} response: {response_text}")
             
             # Extract JSON array
             if '[' in response_text and ']' in response_text:
@@ -194,7 +230,8 @@ Example: If available IDs are [17, 18, 19, 20, 21] and you want to rank them, re
             
         except Exception as e:
             logger.error(f"Error in {self.provider} reranking: {str(e)}")
-            return documents[:top_k]
+            logger.info("Falling back to simple reranking due to error")
+            return self._simple_rerank(query, documents, top_k)
     
     def _simple_rerank(self, query: str, documents: List[Dict], top_k: int) -> List[Dict]:
         """Simple keyword-based reranking (fallback)"""
